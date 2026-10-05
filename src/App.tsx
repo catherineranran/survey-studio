@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ConfirmProvider, IconButton, Spinner, ToastProvider } from './components/ui';
+import { ConfirmProvider, ErrorBoundary, IconButton, Spinner, ToastProvider } from './components/ui';
 import { getBackend, type AuthUser, type Backend } from './lib/backend';
 import { BackendContext } from './lib/backend/context';
 import { useHashPath } from './lib/router';
@@ -11,7 +11,12 @@ import { Workspace } from './pages/Workspace';
 export function App() {
   // Respondent links look like  https://…/survey-studio/?s=<survey id>&PROLIFIC_PID=…
   const respondentId = new URLSearchParams(window.location.search).get('s');
-  if (respondentId) return <Respond surveyId={respondentId} />;
+  if (respondentId)
+    return (
+      <ErrorBoundary label="This survey couldn’t be shown">
+        <Respond surveyId={respondentId} />
+      </ErrorBoundary>
+    );
   return <Admin />;
 }
 

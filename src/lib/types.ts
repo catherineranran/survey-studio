@@ -245,6 +245,8 @@ export interface ResponseMeta {
   durationSec: number;
   /** Seconds spent on each page, keyed by page key. */
   pageTimes: Record<string, number>;
+  /** Page keys on the final path, in order (pages left via Back are not included). */
+  path?: string[];
   blockOrder: string[];
   seed: number;
   language: Lang;

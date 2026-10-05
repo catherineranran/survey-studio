@@ -91,7 +91,20 @@ GitHub Pages needs a **public** repository on the free plan. If you want to keep
 
 **Statuses.** Every response records how it ended: `complete`, `declined_consent`, or the status you gave a skip rule (`screened_out`, `failed_attention`, …). Filter by it in Results, or use the `status` column in the export.
 
-**Exports.** Choose numeric codes for R, SPSS, Stata or Python. Checkbox questions become one 0/1 column per option (`devices_1`, `devices_2`, …), matrix questions one column per statement (`att_1`, …), rank questions one position column per item. Empty cells mean the question wasn't shown. The codebook documents every column.
+**Exports.** Choose numeric codes for R, SPSS, Stata or Python. Checkbox questions become one 0/1 column per option (`devices_1`, `devices_2`, …; a negative code like -99 becomes `devices_m99`), matrix questions one column per statement (`att_1`, …), rank questions one position column per item. A checkbox question that was shown but left empty exports as 0s; empty cells mean the question wasn't shown or wasn't answered. `submitted_at` is the server's time. The codebook documents every column.
+
+**Answers that no longer apply.** Logic, piping and navigation only use answers that still apply on the respondent's path. If someone types an age, then changes an earlier answer so the age question disappears, that age neither triggers skip rules nor gets stored. Someone who declines consent leaves only that decision in the data.
+
+## Known limitations
+
+Worth knowing before you run a real study:
+
+- **Redirect links are visible.** Completion and screen-out links (for example a Prolific completion code) are part of the published survey, so a technically minded participant can find them without finishing. Check responses against your data before approving submissions.
+- **No bot protection or rate limiting.** Anyone with the link can submit, as often as they like, and could forge values. Screen your data (attention checks, durations, duplicate participant IDs).
+- **Balanced assignment counts submitted responses.** When many people start at the same moment, groups can drift apart until those responses arrive. For a large burst of simultaneous participants, plain random assignment may balance as well.
+- **Randomized blocks.** Assignments are recorded by block name, so don't rename condition blocks during data collection. Skip rules can't jump into a randomized block, and blocks inside a randomizer shouldn't have display logic of their own (the survey checker warns about both).
+- **Editing a live survey.** Deleting options or changing a question's type after responses arrive can make earlier answers export as empty. Download your data before big edits. People who resume a survey after you publish changes start again, with a new random assignment.
+- **Shuffled blocks.** In a block with shuffled questions, keep follow-up questions in the next block (the checker warns when a shuffled block contains its own follow-ups).
 
 ## Privacy and data protection
 

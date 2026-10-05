@@ -187,11 +187,28 @@ export function Builder({ survey, update }: { survey: Survey; update: Updater<Su
       questions: [],
     };
     const working: Survey = structuredClone(survey);
+    const ids = new Map<string, string>(); // old question / option / row id -> copy's id
     for (const q of b.questions) {
       const c = cloneQuestion(q, working);
       working.blocks[0].questions.push(c);
       copy.questions.push(c);
+      ids.set(q.id, c.id);
+      const pairs: [typeof q.choices, typeof c.choices][] = [
+        [q.choices, c.choices],
+        [q.rows, c.rows],
+        [q.columns, c.columns],
+      ];
+      for (const [from, to] of pairs) from?.forEach((x, i) => to?.[i] && ids.set(x.id, to[i].id));
     }
+    // Conditions inside the copy that refer to questions of the same block follow the copies.
+    const remap = (l: Block['displayLogic']) =>
+      l?.conditions.forEach((cd) => {
+        if (!ids.has(cd.source)) return;
+        cd.source = ids.get(cd.source)!;
+        if (cd.rowId && ids.has(cd.rowId)) cd.rowId = ids.get(cd.rowId);
+        if (typeof cd.value === 'string' && ids.has(cd.value)) cd.value = ids.get(cd.value);
+      });
+    copy.questions.forEach((q) => remap(q.displayLogic));
     update((s) => {
       const i = s.blocks.findIndex((x) => x.id === b.id);
       s.blocks.splice(i + 1, 0, copy);

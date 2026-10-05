@@ -196,10 +196,12 @@ export interface Ctx {
   answers: Answers;
   otherText: Record<string, string>;
   embedded: Record<string, string>;
+  /** Survey language, used to read numbers typed with local separators. */
+  lang?: Lang;
 }
 
 export function makeCtx(survey: Survey, answers: Answers = {}, embedded: Record<string, string> = {}, otherText: Record<string, string> = {}): Ctx {
-  return { index: indexSurvey(survey), answers, embedded, otherText };
+  return { index: indexSurvey(survey), answers, embedded, otherText, lang: survey.settings?.language };
 }
 
 export function isEmpty(v: unknown): boolean {
@@ -212,11 +214,18 @@ export function isEmpty(v: unknown): boolean {
   return true;
 }
 
-/** Parses numbers typed with a comma or a dot as decimal separator. */
-export function toNumber(v: unknown): number | null {
+/**
+ * Reads a typed number. Spaces and apostrophes are digit-group separators.
+ * German surveys: "1.000" is a thousand and "1,5" one and a half.
+ * English surveys: "45,000" is forty-five thousand; "1,5" is still read as 1.5.
+ */
+export function toNumber(v: unknown, lang?: Lang): number | null {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
   if (typeof v !== 'string') return null;
-  const s = v.trim().replace(/\s/g, '').replace(',', '.');
+  let s = v.trim().replace(/[\s\u00a0\u202f']/g, '');
+  if (lang === 'de' && /^[-+]?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '');
+  else if (lang !== 'de' && /^[-+]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, '');
+  s = s.replace(',', '.');
   if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s)) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
@@ -228,29 +237,29 @@ function choiceCode(list: Choice[] | undefined, id: unknown): number | null {
 }
 
 /** Numeric reading of an answer: choice codes for choice questions, the number itself otherwise. */
-function numericValue(q: Question, v: unknown): number | null {
+function numericValue(q: Question, v: unknown, lang?: Lang): number | null {
   if (q.type === 'single_choice' || q.type === 'dropdown' || q.type === 'consent') return choiceCode(q.choices, v);
   if (q.type === 'matrix') return choiceCode(q.columns, v);
-  return toNumber(v);
+  return toNumber(v, lang);
 }
 
 /* ------------------------------------------------------------------- logic */
 
 export function evalCondition(c: Condition, ctx: Ctx): boolean {
   if (c.source.startsWith('param:')) {
-    const raw = ctx.embedded[c.source.slice(6)] ?? '';
-    return compare(c, raw, raw.trim() !== '', toNumber(raw));
+    const raw = String(ctx.embedded[c.source.slice(6)] ?? '');
+    return compare(c, raw, raw.trim() !== '', toNumber(raw, ctx.lang), ctx.lang);
   }
   const q = ctx.index.questions.get(c.source);
   if (!q) return false;
   let v: unknown = ctx.answers[q.id];
   if (q.type === 'matrix' && c.rowId) v = (v as Record<string, string> | undefined)?.[c.rowId];
-  return compare(c, v, !isEmpty(v), numericValue(q, v));
+  return compare(c, v, !isEmpty(v), numericValue(q, v, ctx.lang), ctx.lang);
 }
 
-function compare(c: Condition, v: unknown, answered: boolean, num: number | null): boolean {
+function compare(c: Condition, v: unknown, answered: boolean, num: number | null, lang?: Lang): boolean {
   const target = c.value;
-  const tn = toNumber(target);
+  const tn = toNumber(target, lang);
   const text = (x: unknown) => (x === undefined || x === null ? '' : String(x)).trim().toLowerCase();
   switch (c.operator) {
     case 'answered':
@@ -346,6 +355,40 @@ function findFrom(plan: Plan, ctx: Ctx, startBlock: number): Step | null {
   return null;
 }
 
+/**
+ * The answers that still apply: answers to questions that are visible on the pages
+ * the respondent actually visited, given the answers kept so far. An answer to a
+ * question that is now hidden (or on an abandoned branch) never drives logic or piping.
+ */
+export function effectiveAnswers(plan: Plan, ctx: Ctx, history: Position[]): Answers {
+  const kept: Answers = {};
+  const c: Ctx = { ...ctx, answers: kept };
+  for (const pos of history) {
+    const page = pageAt(plan, c, pos);
+    if (!page) continue;
+    const block = c.index.blocks.get(page.blockId);
+    if (!block || !isBlockVisible(block, c)) continue;
+    // Within a page a follow-up can sit above its source (shuffled order): repeat until stable.
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const id of page.questionIds) {
+        if (id in kept || !(id in ctx.answers)) continue;
+        const q = c.index.questions.get(id);
+        if (q && isQuestionVisible(q, c)) {
+          kept[id] = ctx.answers[id];
+          changed = true;
+        }
+      }
+    }
+  }
+  return kept;
+}
+
+/** A context whose answers are the effective ones (see effectiveAnswers). */
+export function effectiveCtx(plan: Plan, ctx: Ctx, history: Position[]): Ctx {
+  return { ...ctx, answers: effectiveAnswers(plan, ctx, history) };
+}
+
 export function firstStep(plan: Plan, ctx: Ctx): Step {
   return findFrom(plan, ctx, 0) ?? { kind: 'end', status: 'complete' };
 }
@@ -401,7 +444,8 @@ const URL_RE = /^https?:\/\/[^\s.]+\.\S+$/i;
 export function validateAnswer(q: Question, value: unknown, other: string | undefined, lang: Lang): string | null {
   const v = q.validation ?? {};
   const custom = v.message?.trim();
-  const req = q.required;
+  // Consent must always be given or declined explicitly.
+  const req = q.required || q.type === 'consent';
   switch (q.type) {
     case 'text_block':
       return null;
@@ -414,7 +458,7 @@ export function validateAnswer(q: Question, value: unknown, other: string | unde
       if (q.type === 'short_text') {
         if (v.format === 'email' && !EMAIL_RE.test(s)) return custom || t(lang, 'errEmail');
         if (v.format === 'url' && !URL_RE.test(s)) return custom || t(lang, 'errUrl');
-        if (v.format === 'number' && toNumber(s) === null) return custom || t(lang, 'errNumber');
+        if (v.format === 'number' && toNumber(s, lang) === null) return custom || t(lang, 'errNumber');
         if (v.format === 'regex' && v.pattern) {
           try {
             if (!new RegExp(v.pattern).test(s)) return custom || t(lang, 'errPattern');
@@ -427,7 +471,7 @@ export function validateAnswer(q: Question, value: unknown, other: string | unde
     }
     case 'number': {
       if (isEmpty(value)) return req ? t(lang, 'errRequired') : null;
-      const n = toNumber(value);
+      const n = toNumber(value, lang);
       if (n === null) return custom || t(lang, 'errNumber');
       if (v.integer && !Number.isInteger(n)) return custom || t(lang, 'errInteger');
       if (v.min !== null && v.min !== undefined && n < v.min) return custom || t(lang, 'errMin', { n: v.min });
@@ -450,7 +494,8 @@ export function validateAnswer(q: Question, value: unknown, other: string | unde
     case 'multi_choice': {
       const arr = Array.isArray(value) ? value : [];
       if (!arr.length) return req ? t(lang, 'errRequired') : null;
-      if (v.minSelected && arr.length < v.minSelected) return custom || t(lang, 'errMinSelected', { n: v.minSelected });
+      const exclusivePicked = q.choices?.some((c) => c.exclusive && arr.includes(c.id));
+      if (v.minSelected && arr.length < v.minSelected && !exclusivePicked) return custom || t(lang, 'errMinSelected', { n: v.minSelected });
       if (v.maxSelected && arr.length > v.maxSelected) return custom || t(lang, 'errMaxSelected', { n: v.maxSelected });
       const otherChoice = q.choices?.find((c) => c.other && arr.includes(c.id));
       if (otherChoice && !other?.trim()) return t(lang, 'errOther');
@@ -468,7 +513,7 @@ export function validateAnswer(q: Question, value: unknown, other: string | unde
       const rec = (value ?? {}) as Record<string, number | string>;
       const entries = Object.values(rec).filter((x) => !isEmpty(x));
       if (!entries.length) return req ? t(lang, 'errRequired') : null;
-      const nums = entries.map(toNumber);
+      const nums = entries.map((x) => toNumber(x, lang));
       if (nums.some((n) => n === null)) return t(lang, 'errNumber');
       if (nums.some((n) => (n as number) < 0)) return t(lang, 'errMin', { n: 0 });
       const total = v.total ?? 100;
@@ -497,8 +542,9 @@ export function answerText(q: Question, value: unknown, other?: string): string 
       return label(q.choices, value);
     case 'multi_choice':
     case 'rank':
-      return (value as string[]).map((id) => label(q.choices, id)).filter(Boolean).join(', ');
+      return Array.isArray(value) ? value.map((id) => label(q.choices, id)).filter(Boolean).join(', ') : String(value);
     case 'matrix': {
+      if (typeof value !== 'object' || Array.isArray(value)) return String(value);
       const rec = value as Record<string, string>;
       return (q.rows ?? [])
         .filter((r) => rec[r.id])
@@ -506,6 +552,7 @@ export function answerText(q: Question, value: unknown, other?: string): string 
         .join('; ');
     }
     case 'constant_sum': {
+      if (typeof value !== 'object' || Array.isArray(value)) return String(value);
       const rec = value as Record<string, number>;
       return (q.choices ?? [])
         .filter((c) => !isEmpty(rec[c.id]))
@@ -565,23 +612,32 @@ export function finalizeAnswers(
   plan: Plan,
   ctx: Ctx,
   history: Position[],
+  status = 'complete',
 ): { answers: Answers; otherText: Record<string, string> } {
+  const effective = effectiveAnswers(plan, ctx, history);
+  const ectx: Ctx = { ...ctx, answers: effective };
   const shown = new Set<string>();
   for (const pos of history) {
-    const page = pageAt(plan, ctx, pos);
+    const page = pageAt(plan, ectx, pos);
     if (!page) continue;
-    const block = ctx.index.blocks.get(page.blockId);
-    if (!block || !isBlockVisible(block, ctx)) continue;
-    for (const q of visibleQuestions(page, ctx)) if (q.type !== 'text_block') shown.add(q.id);
+    const block = ectx.index.blocks.get(page.blockId);
+    if (!block || !isBlockVisible(block, ectx)) continue;
+    for (const q of visibleQuestions(page, ectx)) if (q.type !== 'text_block') shown.add(q.id);
   }
   const answers: Answers = {};
   const otherText: Record<string, string> = {};
   for (const id of shown) {
     const q = ctx.index.questions.get(id)!;
-    let v = ctx.answers[id];
-    if (isEmpty(v)) continue;
+    // Someone who declines consent leaves no answers behind, only the decision itself.
+    if (status === 'declined_consent' && q.type !== 'consent') continue;
+    let v = effective[id];
+    if (isEmpty(v)) {
+      // A checkbox question that was shown but left empty is "none selected", not "not shown".
+      if (q.type === 'multi_choice') answers[id] = [];
+      continue;
+    }
     if (q.type === 'number') {
-      const n = toNumber(v);
+      const n = toNumber(v, ctx.lang);
       if (n === null) continue;
       v = n;
     }
@@ -589,7 +645,7 @@ export function finalizeAnswers(
     if (q.type === 'constant_sum') {
       const rec: Record<string, number> = {};
       for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
-        const n = toNumber(x);
+        const n = toNumber(x, ctx.lang);
         if (n !== null) rec[k] = n;
       }
       v = rec;

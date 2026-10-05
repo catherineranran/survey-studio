@@ -424,7 +424,8 @@ export function ChoiceList({
               <Menu
                 label={`Options for ${word.toLowerCase()} ${i + 1}`}
                 items={[
-                  allowOther && { label: c.other ? 'Remove the text box' : 'Add a text box (“Other”)', icon: 'page', onSelect: () => patch(c.id, { other: !c.other }) },
+                  allowOther &&
+                    (c.other || !items.some((x) => x.other)) && { label: c.other ? 'Remove the text box' : 'Add a text box (“Other”)', icon: 'page', onSelect: () => patch(c.id, { other: !c.other }) },
                   allowExclusive && { label: c.exclusive ? 'Make it a normal option' : 'Make it exclusive (“None of these”)', icon: 'check', onSelect: () => patch(c.id, { exclusive: !c.exclusive }) },
                   { label: 'Move up', icon: 'up', onSelect: () => move(i, i - 1), disabled: i === 0 },
                   { label: 'Move down', icon: 'down', onSelect: () => move(i, i + 1), disabled: i === items.length - 1 },

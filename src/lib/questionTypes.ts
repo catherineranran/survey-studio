@@ -217,7 +217,7 @@ export function convertQuestion(q: Question, type: QuestionType, survey: Survey)
     variable: type === 'text_block' ? '' : q.variable || fresh.variable,
     title: q.title,
     description: q.description,
-    required: type === 'text_block' ? false : q.required,
+    required: type === 'text_block' ? false : type === 'consent' ? true : q.required,
     displayLogic: q.displayLogic ?? null,
   };
   const choiceTypes: QuestionType[] = ['single_choice', 'multi_choice', 'dropdown', 'rank', 'constant_sum'];

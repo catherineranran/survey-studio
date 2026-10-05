@@ -9,6 +9,7 @@ Static React + TypeScript app (Vite). No server code: storage is either the brow
 ## Architecture
 - `src/lib/types.ts` is the data model. A Survey is plain JSON; respondents always get the *published* snapshot (`SurveyRecord.published`), the builder edits `definition`.
 - `src/lib/engine.ts` holds all runtime behaviour (randomization plan, display/skip logic, validation, piping, answer clean-up). Keep it pure and covered by `engine.test.ts`.
+- Logic, piping, progress and navigation must use `effectiveCtx(plan, ctx, history)`: only answers that still apply on the respondent's path. Raw `ctx.answers` are only for showing what people typed in the inputs. `finalizeAnswers` applies the same rule before storing.
 - `src/lib/backend/` has two implementations of the `Backend` interface (`local.ts`, `supabase.ts`). Any new data operation needs both, plus SQL in `supabase/schema.sql` if respondents call it.
 - Respondents never touch tables directly in Supabase: only `get_public_survey` and `submit_response` (security definer). Don't add anon policies.
 - `src/components/QuestionView.tsx` renders every question type for respondents, the preview and the builder canvas.

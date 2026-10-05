@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Dialog, Empty, Icon, IconButton, Spinner, useToast } from '../components/ui';
+import { Button, Dialog, Empty, ErrorBoundary, Icon, IconButton, Spinner, useToast } from '../components/ui';
 import { useBackend } from '../lib/backend/context';
 import { lintSurvey, type Issue } from '../lib/lint';
 import { navigate } from '../lib/router';
@@ -206,11 +206,13 @@ export function Workspace({ id, tab }: { id: string; tab: string }) {
       </nav>
 
       <div className="ws-body">
+        <ErrorBoundary key={active}>
         {active === 'build' && <Builder survey={survey} update={update} />}
         {active === 'flow' && <Flow survey={survey} update={update} surveyId={id} />}
         {active === 'settings' && <SettingsTab survey={survey} update={update} />}
         {active === 'share' && <ShareTab backend={backend} record={record} survey={survey} hasChanges={hasChanges} onPublish={publish} onStatus={setStatus} />}
         {active === 'results' && <Results backend={backend} surveyId={id} survey={record.published ?? survey} />}
+        </ErrorBoundary>
       </div>
 
       {previewOpen && <PreviewOverlay survey={survey} surveyId={id} onClose={() => setPreviewOpen(false)} />}

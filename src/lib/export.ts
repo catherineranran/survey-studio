@@ -33,6 +33,11 @@ function choiceValues(list?: Choice[]) {
   return (list ?? []).map((c) => ({ code: c.code, label: c.label }));
 }
 
+/** Column suffix for a code: -99 becomes m99, so the column name stays valid. */
+function suffix(code: number): string {
+  return String(code).replace('-', 'm').replace('.', '_');
+}
+
 function plainTitle(q: Question): string {
   return q.title.replace(/\s+/g, ' ').trim();
 }
@@ -77,7 +82,7 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
       }
       return [
         ...(q.choices ?? []).map<Column>((c) => ({
-          name: `${v}_${c.code}`,
+          name: `${v}_${suffix(c.code)}`,
           label: `${title}: ${c.label}`,
           type,
           values: [
@@ -96,7 +101,7 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
     }
     case 'matrix':
       return (q.rows ?? []).map<Column>((row) => ({
-        name: `${v}_${row.code}`,
+        name: `${v}_${suffix(row.code)}`,
         label: `${title}: ${row.label}`,
         type,
         values: choiceValues(q.columns),
@@ -104,7 +109,7 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
       }));
     case 'rank':
       return (q.choices ?? []).map<Column>((c) => ({
-        name: `${v}_${c.code}`,
+        name: `${v}_${suffix(c.code)}`,
         label: `${title}: ${c.label}`,
         type,
         notes: 'Rank position, 1 = top',
@@ -117,7 +122,7 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
       }));
     case 'constant_sum':
       return (q.choices ?? []).map<Column>((c) => ({
-        name: `${v}_${c.code}`,
+        name: `${v}_${suffix(c.code)}`,
         label: `${title}: ${c.label}`,
         type,
         notes: `Points allocated (target total ${q.validation?.total ?? 100})`,
@@ -160,10 +165,12 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
   }
 }
 
-export function buildColumns(survey: Survey, opts: Pick<ExportOptions, 'values' | 'includePreview' | 'includeTimings'>): Column[] {
+export const SYSTEM_COLUMNS = ['response_id', 'submitted_at', 'started_at', 'duration_sec', 'status', 'preview'];
+
+export function buildColumns(survey: Survey, opts: Pick<ExportOptions, 'values' | 'includePreview' | 'includeTimings'>, dedupe = true): Column[] {
   const cols: Column[] = [
     { name: 'response_id', label: 'Response ID', type: 'System', get: (r) => r.id },
-    { name: 'submitted_at', label: 'Submitted at (UTC)', type: 'System', get: (r) => r.meta?.submittedAt || r.createdAt },
+    { name: 'submitted_at', label: 'Submitted at (UTC, server time)', type: 'System', get: (r) => r.createdAt || r.meta?.submittedAt || null },
     { name: 'started_at', label: 'Started at (UTC)', type: 'System', get: (r) => r.meta?.startedAt ?? null },
     { name: 'duration_sec', label: 'Time from start to submit, in seconds', type: 'System', get: (r) => r.meta?.durationSec ?? null },
     {
@@ -187,9 +194,11 @@ export function buildColumns(survey: Survey, opts: Pick<ExportOptions, 'values' 
         type: 'Timing',
         get: (r) => {
           const pt = r.meta?.pageTimes ?? {};
+          const onPath = r.meta?.path ? new Set(r.meta.path) : null;
           let total = 0;
           let seen = false;
           for (const [k, s] of Object.entries(pt)) {
+            if (onPath && !onPath.has(k)) continue; // time on pages the respondent backed out of
             if (k === b.id || k.startsWith(`${b.id}:`)) {
               total += s;
               seen = true;
@@ -200,13 +209,14 @@ export function buildColumns(survey: Survey, opts: Pick<ExportOptions, 'values' 
       });
     }
   }
-  // Column names must be unique for analysis software.
-  const seen = new Map<string, number>();
+  if (!dedupe) return cols;
+  // Column names must be unique for analysis software (the survey checker reports clashes).
+  const taken = new Set<string>();
   for (const c of cols) {
-    const key = c.name.toLowerCase();
-    const n = seen.get(key) ?? 0;
-    seen.set(key, n + 1);
-    if (n > 0) c.name = `${c.name}_${n + 1}`;
+    let name = c.name;
+    for (let k = 2; taken.has(name.toLowerCase()); k++) name = `${c.name}_${k}`;
+    taken.add(name.toLowerCase());
+    c.name = name;
   }
   return cols;
 }
@@ -223,7 +233,7 @@ export function csvCell(v: Cell, dialect: CsvDialect = 'standard'): string {
     s = String(v);
     if (dialect === 'excel_de') s = s.replace('.', ',');
   } else {
-    s = v;
+    s = typeof v === 'string' ? v : JSON.stringify(v);
     if (/^[=+\-@\t\r]/.test(s) && toNumber(s) === null) s = `'${s}`;
   }
   const sep = dialect === 'excel_de' ? ';' : ',';
@@ -281,14 +291,14 @@ export function codebookMarkdown(survey: Survey, opts: Pick<ExportOptions, 'valu
 /** SPSS syntax that applies variable and value labels after importing the CSV with numeric codes. */
 export function spssSyntax(survey: Survey, opts: Pick<ExportOptions, 'includePreview' | 'includeTimings'>): string {
   const cols = buildColumns(survey, { ...opts, values: 'codes' });
-  const q = (s: string) => `'${s.replace(/'/g, "''").replace(/\s+/g, ' ').slice(0, 250)}'`;
+  const q = (s: string) => `'${s.replace(/\s+/g, ' ').slice(0, 240).replace(/'/g, "''")}'`;
   const out = [`* SPSS labels for "${survey.title.replace(/"/g, "'")}", generated by Survey Studio.`, '* Import the CSV exported with numeric codes first, then run this syntax.', ''];
   out.push('VARIABLE LABELS');
-  out.push(cols.map((c) => `  ${c.name} ${q(c.label)}`).join('\n  /') + '.');
+  out.push('  ' + cols.map((c) => `${c.name} ${q(c.label)}`).join('\n  /') + '.');
   const withValues = cols.filter((c) => c.values?.length);
   if (withValues.length) {
     out.push('', 'VALUE LABELS');
-    out.push(withValues.map((c) => `  ${c.name} ${c.values!.map((v) => `${v.code} ${q(v.label)}`).join(' ')}`).join('\n  /') + '.');
+    out.push('  ' + withValues.map((c) => `${c.name} ${c.values!.map((v) => `${v.code} ${q(v.label)}`).join(' ')}`).join('\n  /') + '.');
   }
   out.push('EXECUTE.', '');
   return out.join('\n');

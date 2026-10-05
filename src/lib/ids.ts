@@ -56,8 +56,12 @@ export function toVariable(text: string, fallback = 'var'): string {
   return v;
 }
 
+/** Column names the export uses for its own system fields. */
+export const RESERVED_NAMES = new Set(['response_id', 'submitted_at', 'started_at', 'duration_sec', 'status', 'preview']);
+
 export function variableError(survey: Survey, name: string, questionId?: string): string | null {
   if (!name) return 'Give this question a variable name.';
+  if (RESERVED_NAMES.has(name.toLowerCase())) return `“${name}” is reserved for a column every export has. Choose another name.`;
   if (!VARIABLE_RE.test(name))
     return 'Use letters, digits and underscores, starting with a letter (max 32 characters).';
   if (allVariables(survey, questionId).has(name.toLowerCase())) return `“${name}” is already used.`;

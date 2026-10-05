@@ -4,6 +4,7 @@ import { RichText } from '../components/RichText';
 import { Button, Icon, Spinner } from '../components/ui';
 import { BackendError, getBackend } from '../lib/backend';
 import {
+  effectiveCtx,
   finalizeAnswers,
   firstStep,
   indexSurvey,
@@ -139,7 +140,15 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
             if (raw) {
               try {
                 const saved = JSON.parse(raw) as SavedProgress;
-                if (saved.v === 1 && saved.version === version && saved.history?.length) {
+                // On a shared device, never continue someone else's answers: every declared
+                // URL parameter on this link must match the saved one.
+                const linkParams = urlParams();
+                const sameParticipant = survey.urlParams.every((p) => {
+                  const v = linkParams.get(p.name);
+                  return v === null || v === saved.embedded?.[p.name];
+                });
+                if (!sameParticipant) storage.remove(progressKey(surveyId));
+                else if (saved.v === 1 && saved.version === version && saved.history?.length) {
                   setRt({ ...saved, survey });
                   setResumed(true);
                   setPhase(saved.started ? { kind: 'page' } : { kind: 'welcome' });
@@ -199,10 +208,13 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
   }, [surveyId]);
 
   const index = useMemo(() => (rt ? indexSurvey(rt.survey) : null), [rt?.survey]);
+  // Raw answers keep what people typed (shown in the inputs); `ectx` holds only answers that
+  // still apply on the current path, and is what logic, piping and navigation use.
   const ctx: Ctx | null = useMemo(
-    () => (rt && index ? { index, answers: rt.answers, otherText: rt.otherText, embedded: rt.embedded } : null),
+    () => (rt && index ? { index, answers: rt.answers, otherText: rt.otherText, embedded: rt.embedded, lang: rt.survey.settings.language } : null),
     [rt, index],
   );
+  const ectx: Ctx | null = useMemo(() => (rt && ctx ? effectiveCtx(rt.plan, ctx, rt.history) : null), [rt, ctx]);
 
   /* ---------------------------------------------------- save progress */
   useEffect(() => {
@@ -213,8 +225,8 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
   }, [rt, phase.kind, preview, surveyId]);
 
   const pos = rt?.history[rt.history.length - 1];
-  const page = rt && ctx && pos ? pageAt(rt.plan, ctx, pos) : null;
-  const questions = page && ctx ? visibleQuestions(page, ctx) : [];
+  const page = rt && ectx && pos ? pageAt(rt.plan, ectx, pos) : null;
+  const questions = page && ectx ? visibleQuestions(page, ectx) : [];
 
   const focusTop = useCallback(() => {
     requestAnimationFrame(() => {
@@ -251,7 +263,8 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
     if (!rt || !ctx) return;
     setSubmitting(true);
     setSubmitError(null);
-    const { answers, otherText } = finalizeAnswers(rt.plan, ctx, rt.history);
+    const { answers, otherText } = finalizeAnswers(rt.plan, ctx, rt.history, status);
+    const path = rt.history.map((p) => pageAt(rt.plan, ctx, p)?.key).filter((k): k is string => !!k);
     const submittedAt = new Date().toISOString();
     const data: ResponseData = {
       answers,
@@ -263,6 +276,7 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
         submittedAt,
         durationSec: Math.max(0, Math.round((Date.parse(submittedAt) - Date.parse(rt.startedAt)) / 1000)),
         pageTimes,
+        path,
         blockOrder: rt.plan.blockOrder,
         seed: rt.plan.seed,
         language: rt.survey.settings.language,
@@ -280,9 +294,10 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
       }
       const extra = { response_id: id };
       const s = rt.survey.settings;
-      const endMessage = pipe(message || s.endMessage || t(lang, 'defaultEndMessage'), ctx, extra);
+      const finalCtx = effectiveCtx(rt.plan, ctx, rt.history);
+      const endMessage = pipe(message || s.endMessage || t(lang, 'defaultEndMessage'), finalCtx, extra);
       const target = redirect ?? (status === 'complete' ? s.redirectUrl : '');
-      const url = target?.trim() ? pipeUrl(target.trim(), ctx, extra) : undefined;
+      const url = target?.trim() ? pipeUrl(target.trim(), finalCtx, extra) : undefined;
       setPhase({ kind: 'done', message: endMessage, redirect: url });
       focusTop();
       if (url && !preview && /^https?:\/\//i.test(url)) setTimeout(() => window.location.assign(url), 1500);
@@ -299,9 +314,12 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
 
   /* ------------------------------------------------------ navigation */
   const next = () => {
-    if (!rt || !ctx || !pos || submitting) return;
+    if (!rt || !ctx || !ectx || !pos || submitting) return;
+    const declined = questions.some(
+      (q) => q.type === 'consent' && q.endOnDecline !== false && q.choices && q.choices.length > 1 && rt.answers[q.id] === q.choices[1].id,
+    );
     const errs: Record<string, string> = {};
-    for (const q of questions) {
+    for (const q of declined ? [] : questions) {
       const e = validateAnswer(q, rt.answers[q.id], rt.otherText[q.id], lang);
       if (e) errs[q.id] = e;
     }
@@ -319,7 +337,7 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
     setErrors({});
     setShowSummary(false);
     const pageTimes = recordTime();
-    const step = nextStep(rt.plan, ctx, pos);
+    const step = nextStep(rt.plan, ectx, pos);
     if (step.kind === 'page') {
       setRt({ ...rt, pageTimes, history: [...rt.history, step.pos] });
       focusTop();
@@ -377,14 +395,14 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
     );
   }
 
-  if (!rt || !ctx) return null;
+  if (!rt || !ctx || !ectx) return null;
   const s = rt.survey.settings;
-  const peek = pos ? nextStep(rt.plan, ctx, pos) : null;
+  const peek = pos ? nextStep(rt.plan, ectx, pos) : null;
   const isLast = !peek || peek.kind === 'end';
 
   // Progress: pages done vs. pages still ahead on the current path.
   const done = Math.max(0, rt.history.length - 1);
-  const ahead = pos ? remainingPages(rt.plan, ctx, pos) : 0;
+  const ahead = pos ? remainingPages(rt.plan, ectx, pos) : 0;
   const total = phase.kind === 'done' ? done + 1 : done + 1 + ahead;
   const completed = phase.kind === 'done' ? total : done;
 
@@ -392,8 +410,8 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
   let numberOffset = 0;
   if (s.numberQuestions) {
     for (const hp of rt.history.slice(0, -1)) {
-      const p = pageAt(rt.plan, ctx, hp);
-      if (p) numberOffset += visibleQuestions(p, ctx).filter((q) => TYPE_INFO[q.type].answerable).length;
+      const p = pageAt(rt.plan, ectx, hp);
+      if (p) numberOffset += visibleQuestions(p, ectx).filter((q) => TYPE_INFO[q.type].answerable).length;
     }
   }
   let localNumber = 0;
@@ -418,7 +436,7 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
         {phase.kind === 'welcome' && (
           <section className="respond-card welcome">
             <h1>{s.welcomeTitle || rt.survey.title}</h1>
-            <RichText text={pipe(s.welcomeText, ctx)} />
+            <RichText text={pipe(s.welcomeText, ectx)} />
             <div className="respond-nav">
               <span />
               <Button
@@ -467,7 +485,7 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
                   lang={lang}
                   choiceOrder={rt.plan.choiceOrder[q.id]}
                   rowOrder={rt.plan.rowOrder[q.id]}
-                  pipe={(text) => pipe(text, ctx)}
+                  pipe={(text) => pipe(text, ectx)}
                 />
               );
             })}

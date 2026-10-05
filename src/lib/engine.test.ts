@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  effectiveCtx,
   evalLogic,
   finalizeAnswers,
   firstStep,
@@ -290,5 +291,95 @@ describe('finalizeAnswers', () => {
     const out = finalizeAnswers(plan, ctx, [{ block: 1, page: 0 }]);
     expect(out.answers[age.id]).toBe(41);
     expect(out.otherText[gender.id]).toBe('agender');
+  });
+});
+
+describe('answers that no longer apply', () => {
+  const cond = (source: string, operator: 'is' | 'lt', value: string | number) => ({ id: `c${Math.random()}`, source, operator, value });
+
+  it('a hidden follow-up on the same page does not trigger a skip rule', () => {
+    const s = blankSurvey('s');
+    const b1 = s.blocks[0];
+    const q1 = b1.questions[0];
+    const age = { ...createQuestion('number', s), variable: 'age' };
+    age.displayLogic = { match: 'all', conditions: [cond(q1.id, 'is', q1.choices![0].id)] };
+    b1.questions.push(age);
+    b1.branches.push({ id: 'br', logic: { match: 'all', conditions: [cond(age.id, 'lt', 18)] }, target: 'end', endTag: 'screened_out' });
+    const b2 = newBlock(s, 'Main');
+    b2.questions.push(createQuestion('short_text', s));
+    s.blocks.push(b2);
+    const plan = makePlan(s, 1);
+    const h: Position[] = [{ block: 0, page: 0 }];
+    // Typed 16 while "Yes" was selected, then switched to "No": the age box is hidden again.
+    const switched = makeCtx(s, { [q1.id]: q1.choices![1].id, [age.id]: '16' });
+    expect(nextStep(plan, effectiveCtx(plan, switched, h), h[0])).toEqual({ kind: 'page', pos: { block: 1, page: 0 } });
+    const minor = makeCtx(s, { [q1.id]: q1.choices![0].id, [age.id]: '16' });
+    expect(nextStep(plan, effectiveCtx(plan, minor, h), h[0])).toMatchObject({ kind: 'end', status: 'screened_out' });
+  });
+
+  it('answers on an abandoned branch neither steer nor get stored', () => {
+    const s = blankSurvey('s');
+    const b1 = s.blocks[0];
+    const q1 = b1.questions[0];
+    const b2 = newBlock(s, 'Drivers');
+    const pro = { ...createQuestion('single_choice', s), variable: 'pro' };
+    b2.questions.push(pro);
+    const b3 = newBlock(s, 'Commute');
+    const follow = { ...createQuestion('short_text', s), variable: 'drive', displayLogic: { match: 'all' as const, conditions: [cond(pro.id, 'is', pro.choices![0].id)] } };
+    const commute = { ...createQuestion('short_text', s), variable: 'commute' };
+    b3.questions.push(follow, commute);
+    const b4 = newBlock(s, 'Rest');
+    b4.questions.push(createQuestion('short_text', s));
+    s.blocks.push(b2, b3, b4);
+    b1.branches.push({ id: 'br1', logic: { match: 'all', conditions: [cond(q1.id, 'is', q1.choices![1].id)] }, target: b3.id });
+    b3.branches.push({ id: 'br3', logic: { match: 'all', conditions: [cond(pro.id, 'is', pro.choices![0].id)] }, target: 'end', endTag: 'screened_out' });
+    const plan = makePlan(s, 1);
+    // Went through the Drivers block first, then went back and changed Q1 so it's skipped.
+    const raw = makeCtx(s, { [q1.id]: q1.choices![1].id, [pro.id]: pro.choices![0].id, [follow.id]: '45 min', [commute.id]: 'bike' });
+    const h: Position[] = [{ block: 0, page: 0 }];
+    const step = nextStep(plan, effectiveCtx(plan, raw, h), h[0]);
+    expect(step).toEqual({ kind: 'page', pos: { block: 2, page: 0 } });
+    h.push((step as { pos: Position }).pos);
+    expect(nextStep(plan, effectiveCtx(plan, raw, h), h[1])).toEqual({ kind: 'page', pos: { block: 3, page: 0 } });
+    expect(Object.keys(finalizeAnswers(plan, raw, h).answers).sort()).toEqual([q1.id, commute.id].sort());
+  });
+
+  it('a declined consent stores only the decision', () => {
+    const s = blankSurvey('s');
+    const consent = createQuestion('consent', s);
+    const age = { ...createQuestion('number', s), required: true };
+    s.blocks[0].questions = [consent, age];
+    const plan = makePlan(s, 1);
+    const ctx = makeCtx(s, { [consent.id]: consent.choices![1].id, [age.id]: '34' });
+    expect(nextStep(plan, ctx, { block: 0, page: 0 })).toMatchObject({ kind: 'end', status: 'declined_consent' });
+    const out = finalizeAnswers(plan, ctx, [{ block: 0, page: 0 }], 'declined_consent');
+    expect(out.answers).toEqual({ [consent.id]: consent.choices![1].id });
+  });
+
+  it('consent is always required, and a checkbox question left empty is stored as none selected', () => {
+    const s = blankSurvey('s');
+    const consent = { ...createQuestion('consent', s), required: false };
+    expect(validateAnswer(consent, undefined, undefined, 'en')).toMatch(/needs an answer/);
+    const multi = createQuestion('multi_choice', s);
+    s.blocks[0].questions = [multi];
+    expect(finalizeAnswers(makePlan(s, 1), makeCtx(s, {}), [{ block: 0, page: 0 }]).answers[multi.id]).toEqual([]);
+  });
+
+  it('an exclusive option satisfies a minimum number of selections', () => {
+    const s = build('study');
+    const devices = qByVar(s, 'devices');
+    devices.validation = { minSelected: 2 };
+    expect(validateAnswer(devices, [devices.choices!.find((c) => c.exclusive)!.id], undefined, 'en')).toBeNull();
+    expect(validateAnswer(devices, [devices.choices![0].id], undefined, 'en')).toMatch(/at least 2/);
+  });
+
+  it('reads numbers the way each language writes them', () => {
+    expect(toNumber('45,000', 'en')).toBe(45000);
+    expect(toNumber('1,5', 'en')).toBe(1.5);
+    expect(toNumber('1.000', 'de')).toBe(1000);
+    expect(toNumber('1,5', 'de')).toBe(1.5);
+    expect(toNumber('1.234,5', 'de')).toBe(1234.5);
+    expect(toNumber('0.125', 'en')).toBe(0.125);
+    expect(toNumber("10'000", 'de')).toBe(10000);
   });
 });

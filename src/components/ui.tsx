@@ -1,4 +1,5 @@
 import {
+  Component,
   createContext,
   useCallback,
   useContext,
@@ -551,4 +552,24 @@ export function Empty({ title, children, action }: { title: string; children?: R
       {action}
     </div>
   );
+}
+
+/* ---------------------------------------------------------- error boundary */
+
+/** Keeps one malformed record or a bug from blanking the whole page. */
+export class ErrorBoundary extends Component<{ children: ReactNode; label?: string }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="empty" role="alert">
+        <h3>{this.props.label ?? 'This part of the page couldn’t be shown'}</h3>
+        <p className="empty-text">{this.state.error.message}</p>
+        <Button onClick={() => window.location.reload()}>Reload the page</Button>
+      </div>
+    );
+  }
 }

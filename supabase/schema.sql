@@ -125,12 +125,13 @@ set search_path = public
 as $$
 declare
   s        public.surveys%rowtype;
-  lim      int;
+  lim      bigint;
   close_at timestamptz;
-  n        int;
+  n        bigint;
   new_id   uuid;
 begin
-  select * into s from public.surveys where id = p_survey;
+  -- Lock the survey row so concurrent submissions can't overshoot the response limit.
+  select * into s from public.surveys where id = p_survey for update;
   if not found or s.published is null then
     raise exception 'not_found';
   end if;
@@ -138,12 +139,18 @@ begin
     raise exception 'closed';
   end if;
 
-  close_at := nullif(s.published -> 'settings' ->> 'closeAt', '')::timestamptz;
+  begin
+    close_at := nullif(s.published -> 'settings' ->> 'closeAt', '')::timestamptz;
+  exception when others then
+    close_at := null;  -- an unreadable date never blocks submissions
+  end;
   if close_at is not null and now() > close_at then
     raise exception 'closed';
   end if;
 
-  lim := nullif(s.published -> 'settings' ->> 'responseLimit', '')::int;
+  if jsonb_typeof(s.published -> 'settings' -> 'responseLimit') = 'number' then
+    lim := floor((s.published -> 'settings' ->> 'responseLimit')::numeric)::bigint;
+  end if;
   if lim is not null and lim > 0 then
     select count(*) into n from public.responses where survey_id = p_survey and not is_preview;
     if n >= lim then
@@ -151,7 +158,16 @@ begin
     end if;
   end if;
 
-  if jsonb_typeof(p_data) <> 'object' or octet_length(p_data::text) > 500000 then
+  -- Shape checks: the app always sends these as objects of the right kinds.
+  if jsonb_typeof(p_data) <> 'object'
+     or octet_length(p_data::text) > 200000
+     or jsonb_typeof(coalesce(p_data -> 'answers', '{}'::jsonb)) <> 'object'
+     or jsonb_typeof(coalesce(p_data -> 'embedded', '{}'::jsonb)) <> 'object'
+     or jsonb_typeof(coalesce(p_data -> 'meta', '{}'::jsonb)) <> 'object'
+     or exists (
+       select 1 from jsonb_each(coalesce(p_data -> 'embedded', '{}'::jsonb)) e
+       where jsonb_typeof(e.value) <> 'string' or length(e.value #>> '{}') > 1000
+     ) then
     raise exception 'invalid response';
   end if;
 

@@ -389,7 +389,10 @@ function Slider(props: QuestionViewProps & { a11y: A11y }) {
         style={{ '--pct': `${pct}%` } as CSSProperties}
         onChange={(e) => commit(e.currentTarget)}
         onPointerUp={(e) => commit(e.currentTarget)}
-        onKeyUp={(e) => commit(e.currentTarget)}
+        onKeyUp={(e) => {
+          // Tabbing onto the slider is not an answer; arrow, Home/End and Page keys are.
+          if (/^(Arrow|Home|End|Page)/.test(e.key)) commit(e.currentTarget);
+        }}
         aria-valuetext={num === null ? t(lang, 'notAnswered') : String(num)}
         {...a11y}
       />

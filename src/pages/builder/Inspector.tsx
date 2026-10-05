@@ -53,7 +53,11 @@ export function QuestionInspector({
             <Field label="Variable name" error={varErr} hint="Column name in exports and the name used for {{piping}}.">
               <input className="input mono" value={q.variable} spellCheck={false} onChange={(e) => change((x) => void (x.variable = e.target.value.replace(/\s/g, '_')), 'var')} />
             </Field>
-            <Toggle label="Required" hint={q.type === 'consent' ? 'Respondents must choose agree or decline.' : undefined} checked={q.required} onChange={(on) => change((x) => void (x.required = on))} />
+            {q.type === 'consent' ? (
+              <p className="hint">Consent is always required: respondents choose agree or decline before they continue.</p>
+            ) : (
+              <Toggle label="Required" checked={q.required} onChange={(on) => change((x) => void (x.required = on))} />
+            )}
           </>
         )}
       </section>

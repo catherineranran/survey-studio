@@ -113,7 +113,7 @@ export function summarize(q: Question, responses: SurveyResponse[]): Summary {
     case 'matrix': {
       const columns = (q.columns ?? []).map((c) => ({ id: c.id, label: c.label, code: c.code }));
       const rows = (q.rows ?? []).map((row) => {
-        const picked = answers.map(({ v }) => (v as Record<string, string>)[row.id]).filter(Boolean);
+        const picked = answers.map(({ v }) => (v && typeof v === 'object' ? (v as Record<string, string>)[row.id] : undefined)).filter(Boolean);
         const counts = columns.map((c) => picked.filter((p) => p === c.id).length);
         const codes = picked.map((p) => columns.find((c) => c.id === p)?.code).filter((x): x is number => typeof x === 'number');
         return { id: row.id, label: row.label, counts, n: picked.length, mean: codes.length ? codes.reduce((a, b) => a + b, 0) / codes.length : null };
@@ -122,7 +122,7 @@ export function summarize(q: Question, responses: SurveyResponse[]): Summary {
     }
     case 'rank': {
       const items = (q.choices ?? []).map((c) => {
-        const positions = answers.map(({ v }) => (v as string[]).indexOf(c.id)).filter((i) => i >= 0);
+        const positions = answers.map(({ v }) => (Array.isArray(v) ? v.indexOf(c.id) : -1)).filter((i) => i >= 0);
         const meanRank = positions.length ? positions.reduce((a, b) => a + b + 1, 0) / positions.length : 0;
         return { id: c.id, label: c.label, meanRank, firstPlace: positions.filter((i) => i === 0).length };
       });
@@ -131,7 +131,7 @@ export function summarize(q: Question, responses: SurveyResponse[]): Summary {
     }
     case 'constant_sum': {
       const items = (q.choices ?? []).map((c) => {
-        const vals = answers.map(({ v }) => toNumber((v as Record<string, number>)[c.id]) ?? 0);
+        const vals = answers.map(({ v }) => (v && typeof v === 'object' ? (toNumber((v as Record<string, number>)[c.id]) ?? 0) : 0));
         return { id: c.id, label: c.label, mean: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0 };
       });
       return { kind: 'sum', answered, items };
