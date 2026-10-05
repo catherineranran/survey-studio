@@ -160,7 +160,7 @@ export function Flow({ survey, update, surveyId }: { survey: Survey; update: Upd
               </div>
               <Toggle
                 label="Keep groups balanced"
-                hint="Each new respondent gets the block shown least often so far (counting completed, non-test responses), like Qualtrics’ “evenly present”."
+                hint="Each new respondent gets the block shown least often so far (counting submitted, non-test responses), like Qualtrics’ “evenly present”."
                 checked={r.balance}
                 onChange={(on) => setR(r.id, { balance: on })}
               />
@@ -246,12 +246,14 @@ function flowItems(survey: Survey): FlowItem[] {
 function FlowBlock({ survey, blockId }: { survey: Survey; blockId: string }) {
   const b = survey.blocks.find((x) => x.id === blockId)!;
   const n = b.questions.filter((q) => TYPE_INFO[q.type].answerable).length;
+  const texts = b.questions.length - n;
+  const size = n ? `${n} question${n === 1 ? '' : 's'}` : texts ? 'text only' : 'empty';
   return (
     <div className="flow-block">
       <p className="flow-block-title">
         <strong>{b.title}</strong>
         <span className="hint">
-          {n} question{n === 1 ? '' : 's'}
+          {size}
           {b.pageMode === 'each' ? ', one per page' : ''}
           {b.randomizeQuestions ? ', shuffled' : ''}
         </span>

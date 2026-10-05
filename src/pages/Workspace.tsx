@@ -35,7 +35,8 @@ export function Workspace({ id, tab }: { id: string; tab: string }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [publishing, setPublishing] = useState(false);
-  const loadedRef = useRef<Survey | null>(null);
+  // JSON of what's stored, so undoing back to it doesn't count as a change (and other edits always save).
+  const savedJson = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +47,7 @@ export function Workspace({ id, tab }: { id: string; tab: string }) {
         if (cancelled) return;
         setRecord(rec);
         if (rec) {
-          loadedRef.current = rec.definition;
+          savedJson.current = JSON.stringify(rec.definition);
           draft.reset(rec.definition);
         }
       })
@@ -59,12 +60,18 @@ export function Workspace({ id, tab }: { id: string; tab: string }) {
 
   // Autosave the working copy shortly after each change.
   useEffect(() => {
-    if (!survey || survey === loadedRef.current) return;
+    if (!survey) return;
+    const json = JSON.stringify(survey);
+    if (json === savedJson.current) {
+      setSaveState('saved');
+      return;
+    }
     setSaveState('unsaved');
     const timer = setTimeout(async () => {
       setSaveState('saving');
       try {
         await backend.saveDraft(id, survey);
+        savedJson.current = json;
         setSaveState('saved');
       } catch (e) {
         setSaveState('error');
@@ -111,7 +118,7 @@ export function Workspace({ id, tab }: { id: string; tab: string }) {
     try {
       const status = record.status === 'draft' ? 'open' : record.status;
       const rec = await backend.publish(id, survey, status);
-      loadedRef.current = survey;
+      savedJson.current = JSON.stringify(survey);
       setRecord(rec);
       setSaveState('saved');
       setIssues(null);

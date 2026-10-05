@@ -195,6 +195,7 @@ revoke all on function public.get_public_survey(uuid) from public;
 revoke all on function public.submit_response(uuid, jsonb) from public;
 revoke all on function public.assignment_counts(uuid, text) from public;
 revoke all on function public.my_response_counts() from public;
+revoke all on function public.my_response_counts() from anon;
 
 grant execute on function public.get_public_survey(uuid) to anon, authenticated;
 grant execute on function public.submit_response(uuid, jsonb) to anon, authenticated;

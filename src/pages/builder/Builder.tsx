@@ -68,6 +68,8 @@ export function Builder({ survey, update }: { survey: Survey; update: Updater<Su
     });
     setAdding(null);
     selectQuestion(q.id, true);
+    // After the picker closes (and hands focus back), put the cursor in the new question's text.
+    setTimeout(() => document.querySelector<HTMLTextAreaElement>(`#q-${q.id} .qedit-title`)?.focus(), 80);
   };
 
   const duplicateQ = (qid: string) => {

@@ -4,11 +4,14 @@ import { uid } from '../../lib/ids';
 import { SCALE_PRESETS, makeChoices } from '../../lib/questionTypes';
 import type { Choice, Lang, Question, Survey } from '../../lib/types';
 
+const DEFAULT_TITLES = new Set(['Untitled question', 'Neue Frage', 'Instructions', 'Hinweise']);
+
 export type QMutate = (mutate: (q: Question) => void, coalesce?: string) => void;
 
 export function QuestionEditor({ survey, q, change }: { survey: Survey; q: Question; change: QMutate }) {
   const lang = survey.settings.language;
   const isText = q.type === 'text_block';
+  const selectedOnFocus = useRef(false);
   return (
     <div className="qedit" onClick={(e) => e.stopPropagation()}>
       <AutoTextarea
@@ -16,6 +19,17 @@ export function QuestionEditor({ survey, q, change }: { survey: Survey; q: Quest
         value={q.title}
         placeholder={isText ? 'Heading (optional)' : 'Question text'}
         aria-label={isText ? 'Heading' : 'Question text'}
+        // Default titles are selected on focus, so typing replaces them.
+        onFocus={(e) => {
+          if (!DEFAULT_TITLES.has(q.title.trim())) return;
+          e.currentTarget.select();
+          selectedOnFocus.current = true;
+        }}
+        onMouseUp={(e) => {
+          // Keep the selection made on focus instead of letting the click place the caret.
+          if (selectedOnFocus.current) e.preventDefault();
+          selectedOnFocus.current = false;
+        }}
         onChange={(e) => change((x) => void (x.title = e.target.value), 'title')}
       />
       <AutoTextarea
@@ -27,7 +41,7 @@ export function QuestionEditor({ survey, q, change }: { survey: Survey; q: Quest
       />
       <TypeContent survey={survey} q={q} change={change} lang={lang} />
       <p className="hint qedit-hint">
-        Format with **bold**, *italic* and [links](https://example.org). Insert an earlier answer with {'{{'}variable{'}}'}.
+        Format with **bold**, *italic*, [links](https://…) and images ![description](https://…). Insert an earlier answer with {'{{'}variable{'}}'}.
       </p>
     </div>
   );
@@ -332,24 +346,24 @@ export function ChoiceList({
       .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').trim())
       .filter(Boolean);
     if (!lines.length) return;
-    if (!c.label) {
-      const next = items.slice();
-      next[i] = { ...c, label: lines[0] };
-      const rest = lines.slice(1).map((l, k) => ({ id: uid(prefix), label: l, code: 0, _k: k }));
-      const merged = [...next.slice(0, i + 1), ...rest, ...next.slice(i + 1)];
-      // Assign codes in order for the newly added rows.
-      const used = new Set(next.map((x) => x.code));
+    const placeholder = /^(option|item|statement|point|eintrag|aussage)\s*\d+$/i;
+    const othersUntouched = items.every((x, k) => k === i || !x.label.trim() || placeholder.test(x.label.trim()));
+    if ((!c.label || placeholder.test(c.label)) && othersUntouched) {
+      // A fresh list: the pasted lines become the whole list, coded 1, 2, 3 …
+      const next = lines.map((label, k) => ({ id: k === 0 ? c.id : uid(prefix), label, code: k + 1 }));
+      onChange(next);
+      setFocusId(next[next.length - 1].id);
+    } else if (!c.label) {
+      const used = new Set(items.map((x) => x.code));
       let code = 1;
-      const final = merged.map((x) => {
-        if ('_k' in x) {
-          while (used.has(code)) code++;
-          used.add(code);
-          return { id: x.id, label: x.label, code };
-        }
-        return x as Choice;
+      const fresh = lines.slice(1).map((label) => {
+        while (used.has(code)) code++;
+        used.add(code);
+        return { id: uid(prefix), label, code };
       });
-      onChange(final);
-      setFocusId(final[i + rest.length]?.id ?? null);
+      const next = [...items.slice(0, i), { ...c, label: lines[0] }, ...fresh, ...items.slice(i + 1)];
+      onChange(next);
+      setFocusId(fresh.length ? fresh[fresh.length - 1].id : c.id);
     } else {
       insertAfter(i, lines);
     }

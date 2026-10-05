@@ -299,6 +299,8 @@ export function Dialog({
         onClose();
       }}
       onClick={(e) => {
+        // A modal's clicks belong to the modal, not to whatever it was opened from.
+        e.stopPropagation();
         if (e.target === ref.current) onClose();
       }}
     >

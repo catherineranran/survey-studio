@@ -1,11 +1,12 @@
 import { Fragment, type ReactNode } from 'react';
 
 // A deliberately tiny, safe Markdown subset for question text and messages:
-// paragraphs (blank line), line breaks, **bold**, *italic* / _italic_ and
-// [links](https://...). Output is React elements, never raw HTML, so piped
-// answers from respondents can't inject markup.
+// paragraphs (blank line), line breaks, **bold**, *italic* / _italic_,
+// [links](https://...) and images ![description](https://...). Output is React
+// elements, never raw HTML, so piped answers from respondents can't inject markup.
+// Underscores inside words (snake_case, panel IDs) are left alone.
 
-const INLINE = /(\*\*[^*]+\*\*|\*[^*\s][^*]*\*|_[^_\s][^_]*_|\[[^\]]+\]\([^)\s]+\))/g;
+const INLINE = /(!\[[^\]]*\]\([^)\s]+\)|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|(?<![A-Za-z0-9])_[^_\s][^_]*_(?![A-Za-z0-9])|\[[^\]]+\]\([^)\s]+\))/g;
 
 function safeHref(href: string): string | null {
   return /^(https?:|mailto:)/i.test(href) ? href : null;
@@ -19,6 +20,10 @@ function inline(text: string, keyBase: string): ReactNode[] {
     if (part.startsWith('**') && part.endsWith('**') && part.length > 4) return <strong key={key}>{part.slice(2, -2)}</strong>;
     if ((part.startsWith('*') && part.endsWith('*')) || (part.startsWith('_') && part.endsWith('_'))) {
       if (part.length > 2) return <em key={key}>{part.slice(1, -1)}</em>;
+    }
+    const img = /^!\[([^\]]*)\]\(([^)\s]+)\)$/.exec(part);
+    if (img) {
+      return /^https:\/\//i.test(img[2]) ? <img key={key} className="rich-img" src={img[2]} alt={img[1]} loading="lazy" /> : <Fragment key={key}>{img[1]}</Fragment>;
     }
     const link = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(part);
     if (link) {

@@ -1707,9 +1707,14 @@ input:focus-visible + .mark {
   transition: opacity 0.12s;
 }
 
+.insert-here {
+  pointer-events: none;
+}
+
 .qcard:hover .insert-here,
 .insert-here:focus-visible {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .qedit {
@@ -2979,6 +2984,14 @@ input:focus-visible + .mark {
 
 .rich a {
   color: var(--accent);
+}
+
+.rich-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 4px 0;
+  border-radius: var(--r-m);
 }
 
 /* progress as answer-sheet timing marks */
