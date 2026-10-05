@@ -60,15 +60,15 @@ Open the address it prints (usually http://localhost:5173). Pick a template and 
 
 ### Collect responses from anyone (Supabase)
 
-1. Create a free account at [supabase.com](https://supabase.com) and a new project. For data from people in the EU, choose an EU region such as **Frankfurt (eu-central-1)**.
+1. Create a free account at [supabase.com](https://supabase.com) and a new project. For data from people in the EU, choose an EU region such as **Frankfurt (eu-central-1)**. Keep the other default settings.
 2. In the project, open **SQL Editor**, create a new query, paste the whole of [`supabase/schema.sql`](supabase/schema.sql) and select **Run**.
-3. Open **Authentication → URL Configuration** and set **Site URL** to where your Survey Studio runs, e.g. `https://catherineranran.github.io/survey-studio/` (or `http://localhost:5173` while testing).
-4. Open **Project Settings → API** (or **Connect**) and copy the **Project URL** and the **anon / publishable key**.
-5. Give Survey Studio those two values, in one of two ways:
-   - **GitHub Pages:** in the GitHub repository go to **Settings → Secrets and variables → Actions → Variables** and add `SUPABASE_URL` and `SUPABASE_ANON_KEY`. The next deployment picks them up.
-   - **Anywhere else / locally:** paste them into [`public/config.js`](public/config.js).
-6. Open Survey Studio, choose **Create the owner account**, confirm the email Supabase sends you, and sign in.
-7. Recommended: in Supabase under **Authentication → Sign In / Providers**, turn off **Allow new users to sign up** once your account exists, so nobody else can create an account on your instance.
+3. Open **Authentication → Users → Add user → Create new user**. Enter your email and a password, tick **Auto Confirm User**, and create it. This first account becomes the owner.
+4. Open **Authentication → Sign In / Providers** and turn off **Allow new users to sign up**. (The database also refuses accounts that aren't listed as owners; this switch is a second lock.)
+5. Open **Project Settings → API Keys** (or the **Connect** button) and copy the **Project URL** and the **anon / publishable** key. Never use the *secret* or *service_role* key.
+6. Put those two values into [`public/config.js`](public/config.js), or, for GitHub Pages, add them as repository variables `SUPABASE_URL` and `SUPABASE_ANON_KEY` under **Settings → Secrets and variables → Actions → Variables**.
+7. Open Survey Studio and sign in with the account from step 3.
+
+To add a co-owner later, run `insert into public.owners (email) values ('their@email.org');` in the SQL Editor, then add them under Authentication → Users.
 
 The anon key is meant to be public. Respondents can't read any table: they can only load a *published* survey and submit a response while it's open, through two database functions. Each owner only ever sees their own surveys and responses (row-level security). Surveys created in browser storage stay there; to move one, download it as JSON on the dashboard and import it after connecting Supabase.
 
@@ -78,6 +78,8 @@ On Supabase's free plan, projects that see no activity for a week are paused. Re
 
 1. In the repository, open **Settings → Pages** and set **Source** to **GitHub Actions**.
 2. Push to `main`. The workflow in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs the tests, builds and publishes the site to `https://<your-user>.github.io/<repo>/`.
+
+If your personal GitHub Pages site has its own domain, the project appears under it automatically. This copy runs at [ranranli.net/survey-studio](https://ranranli.net/survey-studio/).
 
 GitHub Pages needs a **public** repository on the free plan. If you want to keep the repository private, either upgrade to GitHub Pro, or deploy the same build to Netlify, Vercel or Cloudflare Pages (all free for private repositories): build command `npm run build`, output folder `dist`, and the two `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` environment variables.
 

@@ -6,13 +6,15 @@ export { BackendError } from './types';
 
 declare global {
   interface Window {
-    SURVEY_STUDIO_CONFIG?: { supabaseUrl?: string; supabaseAnonKey?: string };
+    SURVEY_STUDIO_CONFIG?: { supabaseUrl?: string; supabaseAnonKey?: string; allowSignup?: boolean };
   }
 }
 
 export interface AppConfig {
   supabaseUrl: string;
   supabaseAnonKey: string;
+  /** Show "Create account" on the sign-in page. Off by default: create owners in the Supabase dashboard. */
+  allowSignup: boolean;
 }
 
 /** Reads the Supabase settings from build-time variables or public/config.js. */
@@ -21,6 +23,7 @@ export function readConfig(): AppConfig {
   return {
     supabaseUrl: String(import.meta.env.VITE_SUPABASE_URL || runtime?.supabaseUrl || '').trim(),
     supabaseAnonKey: String(import.meta.env.VITE_SUPABASE_ANON_KEY || runtime?.supabaseAnonKey || '').trim(),
+    allowSignup: import.meta.env.VITE_ALLOW_SIGNUP === 'true' || runtime?.allowSignup === true,
   };
 }
 

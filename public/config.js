@@ -8,4 +8,7 @@
 window.SURVEY_STUDIO_CONFIG = {
   supabaseUrl: '',
   supabaseAnonKey: '',
+  // Owner accounts are created in the Supabase dashboard (Authentication -> Users).
+  // Set to true only if you want a "Create account" option on the sign-in page.
+  allowSignup: false,
 };

@@ -7,7 +7,9 @@
 --
 -- Security model
 --   * Survey owners sign in (Supabase Auth) and can only see their own surveys
---     and the responses to them (row-level security).
+--     and the responses to them (row-level security). New accounts are refused
+--     unless their email is in public.owners (the first account is added
+--     automatically), so strangers can't sign up.
 --   * Respondents are anonymous. They have NO direct access to the tables.
 --     They can only call get_public_survey() (returns the published snapshot,
 --     never the working draft) and submit_response() (only while the survey is
@@ -52,6 +54,60 @@ drop trigger if exists surveys_touch_updated_at on public.surveys;
 create trigger surveys_touch_updated_at
   before update on public.surveys
   for each row execute function public.touch_updated_at();
+
+-- Owner accounts -------------------------------------------------------------
+--
+-- Survey Studio has no public sign-up. Only emails listed in public.owners can
+-- get an account; the very first account becomes the owner automatically.
+-- To add a co-owner later, run (with their email) and then add them under
+-- Authentication -> Users:
+--   insert into public.owners (email) values ('colleague@example.org');
+
+create table if not exists public.owners (
+  email      text primary key,
+  created_at timestamptz not null default now()
+);
+alter table public.owners enable row level security;  -- no policies: never readable through the API
+revoke all on public.owners from anon, authenticated;
+
+create or replace function public.guard_new_account()
+returns trigger
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  addr text := lower(trim(coalesce(new.email, '')));
+begin
+  if addr = '' then
+    raise exception 'Survey Studio accounts need an email address.';
+  end if;
+  if not exists (select 1 from public.owners) then
+    insert into public.owners (email) values (addr);  -- the first account becomes the owner
+    return new;
+  end if;
+  if exists (select 1 from public.owners where email = addr) then
+    return new;
+  end if;
+  raise exception 'Sign-ups are closed for this Survey Studio.';
+end;
+$$;
+
+revoke all on function public.guard_new_account() from public, anon, authenticated;
+
+do $$
+begin
+  -- Accounts created before this script ran (e.g. in the dashboard) are owners too.
+  insert into public.owners (email)
+    select lower(trim(email)) from auth.users where coalesce(trim(email), '') <> ''
+    on conflict do nothing;
+  drop trigger if exists guard_new_account on auth.users;
+  create trigger guard_new_account
+    before insert on auth.users
+    for each row execute function public.guard_new_account();
+exception when others then
+  raise warning 'Survey Studio could not add its sign-up guard (%). Turn off "Allow new users to sign up" under Authentication instead.', sqlerrm;
+end;
+$$;
 
 -- Access ---------------------------------------------------------------------
 

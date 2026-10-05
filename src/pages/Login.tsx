@@ -2,7 +2,15 @@ import { useState } from 'react';
 import { Button, Field } from '../components/ui';
 import type { Backend } from '../lib/backend';
 
-export function Login({ backend }: { backend: Backend }) {
+function friendly(message: string): string {
+  if (/invalid login credentials/i.test(message)) return 'That email and password don’t match. Check both and try again.';
+  if (/email not confirmed/i.test(message)) return 'Confirm your email address first, using the link Supabase sent you.';
+  if (/signups not allowed|sign-ups are closed|database error saving new user/i.test(message))
+    return 'New accounts can’t be created here. The owner adds accounts in the Supabase dashboard.';
+  return message;
+}
+
+export function Login({ backend, allowSignup }: { backend: Backend; allowSignup: boolean }) {
   const [mode, setMode] = useState<'in' | 'up'>('in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,7 +29,7 @@ export function Login({ backend }: { backend: Backend }) {
         if (needsConfirmation) setNote('Check your inbox and open the confirmation link, then sign in here.');
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendly(e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }
@@ -41,7 +49,7 @@ export function Login({ backend }: { backend: Backend }) {
           <span>Survey Studio</span>
         </div>
         <h1>{mode === 'in' ? 'Sign in to build and analyse surveys' : 'Create the owner account'}</h1>
-        <p className="hint">Respondents don’t need an account. Only you sign in, to edit surveys and see responses.</p>
+        <p className="hint">Only the survey owner signs in here. If you were invited to take part in a survey, open the link you received; you don’t need an account.</p>
         <Field label="Email">
           <input className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </Field>
@@ -69,9 +77,11 @@ export function Login({ backend }: { backend: Backend }) {
         <Button variant="primary" type="submit" disabled={busy || !email || !password}>
           {busy ? 'One moment' : mode === 'in' ? 'Sign in' : 'Create account'}
         </Button>
-        <button type="button" className="link-btn" onClick={() => setMode(mode === 'in' ? 'up' : 'in')}>
-          {mode === 'in' ? 'First time here? Create the owner account' : 'Already have an account? Sign in'}
-        </button>
+        {allowSignup && (
+          <button type="button" className="link-btn" onClick={() => setMode(mode === 'in' ? 'up' : 'in')}>
+            {mode === 'in' ? 'First time here? Create the owner account' : 'Already have an account? Sign in'}
+          </button>
+        )}
       </form>
     </div>
   );
