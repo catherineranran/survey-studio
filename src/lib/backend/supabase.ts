@@ -5,7 +5,7 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 import { normalizeSurvey } from '../templates';
 import type { PublicSurvey, ResponseData, Survey, SurveyRecord, SurveyResponse, SurveyStatus, SurveySummary } from '../types';
-import { BackendError, type AuthUser, type Backend } from './types';
+import { BackendError, type AuthUser, type Backend, type SignupMode, type SignupSettings } from './types';
 
 interface SurveyRow {
   id: string;
@@ -86,14 +86,36 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
       const { error } = await sb.auth.signInWithPassword({ email, password });
       if (error) throw new BackendError(error.message, 'auth');
     },
-    async signUp(email, password) {
-      const redirect = window.location.href.split('#')[0];
-      const { data, error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: redirect } });
+    async signUp(email, password, inviteCode) {
+      const redirect = window.location.origin + window.location.pathname;
+      const { data, error } = await sb.auth.signUp({
+        email,
+        password,
+        // The database checks the code and drops it from the account.
+        options: { emailRedirectTo: redirect, data: inviteCode ? { invite_code: inviteCode } : {} },
+      });
       if (error) throw new BackendError(error.message, 'auth');
       return { needsConfirmation: !data.session };
     },
     async signOut() {
       await sb.auth.signOut();
+    },
+    async signupMode(): Promise<SignupMode> {
+      const { data, error } = await sb.rpc('signup_mode');
+      if (error) return 'closed';
+      return data === 'invite' || data === 'open' ? data : 'closed';
+    },
+    async getSignupSettings(): Promise<SignupSettings | null> {
+      const { data, error } = await sb.rpc('get_signup_settings');
+      if (error || !data) return null;
+      const d = data as { mode: SignupMode; code: string | null };
+      return { mode: d.mode, code: d.code };
+    },
+    async setSignupSettings(mode, newCode) {
+      const { data, error } = await sb.rpc('set_signup_settings', { p_mode: mode, p_new_code: newCode });
+      if (error) fail(error);
+      const d = data as { mode: SignupMode; code: string | null };
+      return { mode: d.mode, code: d.code };
     },
 
     async listSurveys(): Promise<SurveySummary[]> {

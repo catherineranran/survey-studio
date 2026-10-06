@@ -1,20 +1,18 @@
 import { createLocalBackend } from './local';
 import type { Backend } from './types';
 
-export type { Backend, AuthUser } from './types';
+export type { Backend, AuthUser, SignupMode, SignupSettings } from './types';
 export { BackendError } from './types';
 
 declare global {
   interface Window {
-    SURVEY_STUDIO_CONFIG?: { supabaseUrl?: string; supabaseAnonKey?: string; allowSignup?: boolean };
+    SURVEY_STUDIO_CONFIG?: { supabaseUrl?: string; supabaseAnonKey?: string };
   }
 }
 
 export interface AppConfig {
   supabaseUrl: string;
   supabaseAnonKey: string;
-  /** Show "Create account" on the sign-in page. Off by default: create owners in the Supabase dashboard. */
-  allowSignup: boolean;
 }
 
 /** Reads the Supabase settings from build-time variables or public/config.js. */
@@ -23,7 +21,6 @@ export function readConfig(): AppConfig {
   return {
     supabaseUrl: String(import.meta.env.VITE_SUPABASE_URL || runtime?.supabaseUrl || '').trim(),
     supabaseAnonKey: String(import.meta.env.VITE_SUPABASE_ANON_KEY || runtime?.supabaseAnonKey || '').trim(),
-    allowSignup: import.meta.env.VITE_ALLOW_SIGNUP === 'true' || runtime?.allowSignup === true,
   };
 }
 

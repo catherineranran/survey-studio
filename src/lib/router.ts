@@ -27,3 +27,9 @@ export function publicSurveyUrl(id: string): string {
   const { origin, pathname } = window.location;
   return `${origin}${pathname}?s=${encodeURIComponent(id)}`;
 }
+
+/** The link that lets someone create their own account. */
+export function inviteUrl(code: string): string {
+  const { origin, pathname } = window.location;
+  return `${origin}${pathname}?invite=${encodeURIComponent(code)}`;
+}

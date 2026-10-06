@@ -7,9 +7,9 @@
 --
 -- Security model
 --   * Survey owners sign in (Supabase Auth) and can only see their own surveys
---     and the responses to them (row-level security). New accounts are refused
---     unless their email is in public.owners (the first account is added
---     automatically), so strangers can't sign up.
+--     and the responses to them (row-level security). Who may create an account
+--     is decided by the admins (public.owners) in the app: nobody, people with
+--     the invite link, or anyone. The database enforces it on every new account.
 --   * Respondents are anonymous. They have NO direct access to the tables.
 --     They can only call get_public_survey() (returns the published snapshot,
 --     never the working draft) and submit_response() (only while the survey is
@@ -55,12 +55,13 @@ create trigger surveys_touch_updated_at
   before update on public.surveys
   for each row execute function public.touch_updated_at();
 
--- Owner accounts -------------------------------------------------------------
+-- Accounts and sign-up --------------------------------------------------------
 --
--- Survey Studio has no public sign-up. Only emails listed in public.owners can
--- get an account; the very first account becomes the owner automatically.
--- To add a co-owner later, run (with their email) and then add them under
--- Authentication -> Users:
+-- public.owners lists the admins of this Survey Studio; the first account
+-- becomes one automatically. Admins choose in the app (Invite people) who may
+-- create their own account: nobody, people with the invite link, or anyone.
+-- Every account only ever sees its own surveys and responses.
+-- To make someone else an admin, run (with their email):
 --   insert into public.owners (email) values ('colleague@example.org');
 
 create table if not exists public.owners (
@@ -70,6 +71,16 @@ create table if not exists public.owners (
 alter table public.owners enable row level security;  -- no policies: never readable through the API
 revoke all on public.owners from anon, authenticated;
 
+create table if not exists public.app_settings (
+  id          boolean primary key default true check (id),  -- exactly one row
+  signup_mode text not null default 'closed' check (signup_mode in ('closed', 'invite', 'open')),
+  invite_code text,
+  updated_at  timestamptz not null default now()
+);
+insert into public.app_settings (id) values (true) on conflict do nothing;
+alter table public.app_settings enable row level security;  -- read and changed only through the functions below
+revoke all on public.app_settings from anon, authenticated;
+
 create or replace function public.guard_new_account()
 returns trigger
 language plpgsql security definer
@@ -77,18 +88,29 @@ set search_path = public
 as $$
 declare
   addr text := lower(trim(coalesce(new.email, '')));
+  code text := nullif(trim(coalesce(new.raw_user_meta_data ->> 'invite_code', '')), '');
+  cfg  public.app_settings%rowtype;
 begin
   if addr = '' then
     raise exception 'Survey Studio accounts need an email address.';
   end if;
+  -- The invite code is only a key; it is never kept on the account.
+  new.raw_user_meta_data := coalesce(new.raw_user_meta_data, '{}'::jsonb) - 'invite_code';
   if not exists (select 1 from public.owners) then
-    insert into public.owners (email) values (addr);  -- the first account becomes the owner
+    insert into public.owners (email) values (addr);  -- the first account becomes an admin
     return new;
   end if;
   if exists (select 1 from public.owners where email = addr) then
     return new;
   end if;
-  raise exception 'Sign-ups are closed for this Survey Studio.';
+  select * into cfg from public.app_settings where id;
+  if cfg.signup_mode = 'open' then
+    return new;
+  end if;
+  if cfg.signup_mode = 'invite' and cfg.invite_code is not null and code = cfg.invite_code then
+    return new;
+  end if;
+  raise exception 'Sign-ups are closed, or the invite link is no longer valid.';
 end;
 $$;
 
@@ -96,7 +118,7 @@ revoke all on function public.guard_new_account() from public, anon, authenticat
 
 do $$
 begin
-  -- Accounts created before this script ran (e.g. in the dashboard) are owners too.
+  -- Accounts created before this script ran (e.g. in the dashboard) are admins too.
   insert into public.owners (email)
     select lower(trim(email)) from auth.users where coalesce(trim(email), '') <> ''
     on conflict do nothing;
@@ -105,7 +127,64 @@ begin
     before insert on auth.users
     for each row execute function public.guard_new_account();
 exception when others then
-  raise warning 'Survey Studio could not add its sign-up guard (%). Turn off "Allow new users to sign up" under Authentication instead.', sqlerrm;
+  raise warning 'Survey Studio could not add its sign-up guard (%). Keep "Allow new users to sign up" turned off under Authentication.', sqlerrm;
+end;
+$$;
+
+-- What the sign-in page may know: the mode, never the code.
+create or replace function public.signup_mode()
+returns text
+language sql stable security definer
+set search_path = public
+as $$
+  select coalesce((select signup_mode from public.app_settings where id), 'closed');
+$$;
+
+create or replace function public.is_admin()
+returns boolean
+language sql stable security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.owners o
+    where o.email = lower(coalesce(auth.jwt() ->> 'email', ''))
+  );
+$$;
+
+create or replace function public.get_signup_settings()
+returns jsonb
+language plpgsql stable security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not_allowed';
+  end if;
+  return (select jsonb_build_object('mode', signup_mode, 'code', invite_code) from public.app_settings where id);
+end;
+$$;
+
+-- p_new_code: replace the invite code, so links shared before stop working.
+create or replace function public.set_signup_settings(p_mode text, p_new_code boolean default false)
+returns jsonb
+language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not_allowed';
+  end if;
+  if p_mode not in ('closed', 'invite', 'open') then
+    raise exception 'invalid_mode';
+  end if;
+  update public.app_settings
+     set signup_mode = p_mode,
+         invite_code = case when p_new_code or invite_code is null
+                            then substr(replace(gen_random_uuid()::text, '-', ''), 1, 16)
+                            else invite_code end,
+         updated_at  = now()
+   where id;
+  return public.get_signup_settings();
 end;
 $$;
 
@@ -268,8 +347,16 @@ revoke all on function public.submit_response(uuid, jsonb) from public;
 revoke all on function public.assignment_counts(uuid, text) from public;
 revoke all on function public.my_response_counts() from public;
 revoke all on function public.my_response_counts() from anon;
+revoke all on function public.signup_mode() from public;
+revoke all on function public.is_admin() from public, anon;
+revoke all on function public.get_signup_settings() from public, anon;
+revoke all on function public.set_signup_settings(text, boolean) from public, anon;
 
 grant execute on function public.get_public_survey(uuid) to anon, authenticated;
 grant execute on function public.submit_response(uuid, jsonb) to anon, authenticated;
 grant execute on function public.assignment_counts(uuid, text) to anon, authenticated;
 grant execute on function public.my_response_counts() to authenticated;
+grant execute on function public.signup_mode() to anon, authenticated;
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.get_signup_settings() to authenticated;
+grant execute on function public.set_signup_settings(text, boolean) to authenticated;

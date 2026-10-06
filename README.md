@@ -61,14 +61,23 @@ Open the address it prints (usually http://localhost:5173). Pick a template and 
 ### Collect responses from anyone (Supabase)
 
 1. Create a free account at [supabase.com](https://supabase.com) and a new project. For data from people in the EU, choose an EU region such as **Frankfurt (eu-central-1)**. Keep the other default settings.
-2. In the project, open **SQL Editor**, create a new query, paste the whole of [`supabase/schema.sql`](supabase/schema.sql) and select **Run**.
-3. Open **Authentication → Users → Add user → Create new user**. Enter your email and a password, tick **Auto Confirm User**, and create it. This first account becomes the owner.
-4. Open **Authentication → Sign In / Providers** and turn off **Allow new users to sign up**. (The database also refuses accounts that aren't listed as owners; this switch is a second lock.)
-5. Open **Project Settings → API Keys** (or the **Connect** button) and copy the **Project URL** and the **anon / publishable** key. Never use the *secret* or *service_role* key.
-6. Put those two values into [`public/config.js`](public/config.js), or, for GitHub Pages, add them as repository variables `SUPABASE_URL` and `SUPABASE_ANON_KEY` under **Settings → Secrets and variables → Actions → Variables**.
-7. Open Survey Studio and sign in with the account from step 3.
+2. In the project, open **SQL Editor**, create a new query, paste the whole of [`supabase/schema.sql`](supabase/schema.sql) and select **Run**. Run it again after updating Survey Studio; it only adds what's missing.
+3. Open **Authentication → Users → Add user → Create new user**. Enter your email and a password, tick **Auto Confirm User**, and create it. This first account becomes the admin.
+4. Open **Project Settings → API Keys** (or the **Connect** button) and copy the **Project URL** and the **anon / publishable** key. Never use the *secret* or *service_role* key.
+5. Put those two values into [`public/config.js`](public/config.js), or, for GitHub Pages, add them as repository variables `SUPABASE_URL` and `SUPABASE_ANON_KEY` under **Settings → Secrets and variables → Actions → Variables**.
+6. Open Survey Studio and sign in with the account from step 3.
 
-To add a co-owner later, run `insert into public.owners (email) values ('their@email.org');` in the SQL Editor, then add them under Authentication → Users.
+### Letting other people sign up
+
+Each account gets its own surveys and responses; nobody can see anyone else's. As an admin, choose **Invite people** on the dashboard and pick who can create an account:
+
+- **People with the invite link** – share the link; make a new one at any time to stop the old one working.
+- **Anyone who opens Survey Studio** – no link needed.
+- **Nobody** – new accounts only through the Supabase dashboard.
+
+For sign-ups to work, two Supabase settings under **Authentication → Sign In / Providers** need changing once: turn **on** "Allow new users to sign up", and turn **off** "Confirm email". Supabase's built-in email service only delivers to members of your own Supabase organisation (and 2 emails an hour), so confirmation emails wouldn't reach other people. The invite link is what keeps strangers out; the database checks it on every new account. To turn on email confirmation and password-reset emails later, connect your own email service under **Authentication → Emails → SMTP Settings**.
+
+To make someone else an admin, run `insert into public.owners (email) values ('their@email.org');` in the SQL Editor.
 
 The anon key is meant to be public. Respondents can't read any table: they can only load a *published* survey and submit a response while it's open, through two database functions. Each owner only ever sees their own surveys and responses (row-level security). Surveys created in browser storage stay there; to move one, download it as JSON on the dashboard and import it after connecting Supabase.
 

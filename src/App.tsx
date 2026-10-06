@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ConfirmProvider, ErrorBoundary, IconButton, Spinner, ToastProvider } from './components/ui';
-import { getBackend, readConfig, type AuthUser, type Backend } from './lib/backend';
+import { getBackend, type AuthUser, type Backend } from './lib/backend';
 import { BackendContext } from './lib/backend/context';
 import { useHashPath } from './lib/router';
 import { Dashboard } from './pages/Dashboard';
@@ -39,7 +39,7 @@ function Admin() {
   if (path[0] === 'r' && path[1]) return <Respond surveyId={path[1]} />;
   if (fatal) return <p className="fatal">Survey Studio couldn’t start: {fatal}</p>;
   if (!backend || user === undefined) return <Spinner label="Starting Survey Studio" />;
-  if (backend.needsAuth && !user) return <Login backend={backend} allowSignup={readConfig().allowSignup} />;
+  if (backend.needsAuth && !user) return <Login backend={backend} />;
 
   return (
     <BackendContext.Provider value={backend}>

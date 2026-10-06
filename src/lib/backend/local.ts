@@ -87,6 +87,15 @@ export function createLocalBackend(): Backend {
       return { needsConfirmation: false };
     },
     async signOut() {},
+    async signupMode() {
+      return 'closed';
+    },
+    async getSignupSettings() {
+      return null;
+    },
+    async setSignupSettings() {
+      throw new BackendError('Sign-ups need the Supabase database.', 'storage');
+    },
 
     async listSurveys(): Promise<SurveySummary[]> {
       return all()

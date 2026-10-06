@@ -6,6 +6,8 @@ import { uuid } from '../lib/ids';
 import { navigate } from '../lib/router';
 import { TEMPLATES, normalizeSurvey } from '../lib/templates';
 import type { SurveySummary } from '../lib/types';
+import type { SignupSettings } from '../lib/backend';
+import { InviteDialog } from './InviteDialog';
 
 export function Dashboard() {
   const backend = useBackend();
@@ -14,7 +16,14 @@ export function Dashboard() {
   const [list, setList] = useState<SurveySummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [signup, setSignup] = useState<SignupSettings | null>(null);
+  const [inviting, setInviting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Only admins get sign-up settings back; for everyone else the button stays hidden.
+  useEffect(() => {
+    if (backend.mode === 'supabase') void backend.getSignupSettings().then(setSignup);
+  }, [backend]);
 
   const load = () => {
     setError(null);
@@ -96,6 +105,11 @@ export function Dashboard() {
               e.target.value = '';
             }}
           />
+          {signup && (
+            <Button icon="share" onClick={() => setInviting(true)}>
+              Invite people
+            </Button>
+          )}
           <Button icon="upload" onClick={() => fileRef.current?.click()}>
             Import
           </Button>
@@ -185,6 +199,7 @@ export function Dashboard() {
       )}
 
       <NewSurveyDialog open={creating} onClose={() => setCreating(false)} onCreate={create} />
+      {signup && <InviteDialog backend={backend} open={inviting} onClose={() => setInviting(false)} initial={signup} />}
     </div>
   );
 }

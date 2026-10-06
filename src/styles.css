@@ -2244,6 +2244,14 @@ input:focus-visible + .mark {
   gap: 8px;
 }
 
+.invite-intro {
+  font-size: 14px;
+}
+
+.page-actions {
+  flex-wrap: wrap;
+}
+
 .link-row .input {
   flex: 1;
 }
