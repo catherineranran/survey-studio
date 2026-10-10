@@ -3,6 +3,7 @@
 
 import { allQuestions, isEmpty, toNumber } from './engine';
 import { toVariable } from './ids';
+import { plainText } from './markdown';
 import { TYPE_INFO } from './questionTypes';
 import type { Choice, Question, Survey, SurveyResponse } from './types';
 
@@ -30,7 +31,7 @@ export interface Column {
 }
 
 function choiceValues(list?: Choice[]) {
-  return (list ?? []).map((c) => ({ code: c.code, label: c.label }));
+  return (list ?? []).map((c) => ({ code: c.code, label: plainText(c.label) }));
 }
 
 /** Column suffix for a code: -99 becomes m99, so the column name stays valid. */
@@ -39,7 +40,7 @@ function suffix(code: number): string {
 }
 
 function plainTitle(q: Question): string {
-  return q.title.replace(/\s+/g, ' ').trim();
+  return plainText(q.title).replace(/\s+/g, ' ').trim();
 }
 
 export function questionColumns(q: Question, mode: ValueMode): Column[] {
@@ -50,7 +51,7 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
   const pick = (list: Choice[] | undefined, id: unknown): Cell => {
     const c = list?.find((x) => x.id === id);
     if (!c) return null;
-    return mode === 'codes' ? c.code : c.label;
+    return mode === 'codes' ? c.code : plainText(c.label);
   };
   const otherCol: Column[] = q.choices?.some((c) => c.other)
     ? [{ name: `${v}_other`, label: `${title} (other, specified)`, type: 'Text', get: (r) => r.otherText?.[q.id] ?? null }]
@@ -74,7 +75,7 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
             get: (r) => {
               const arr = a(r);
               if (!Array.isArray(arr) || !arr.length) return null;
-              return arr.map((id) => q.choices?.find((c) => c.id === id)?.label ?? '').filter(Boolean).join('; ');
+              return arr.map((id) => plainText(q.choices?.find((c) => c.id === id)?.label)).filter(Boolean).join('; ');
             },
           },
           ...otherCol,
@@ -83,7 +84,7 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
       return [
         ...(q.choices ?? []).map<Column>((c) => ({
           name: `${v}_${suffix(c.code)}`,
-          label: `${title}: ${c.label}`,
+          label: `${title}: ${plainText(c.label)}`,
           type,
           values: [
             { code: 1, label: 'Selected' },
@@ -102,7 +103,7 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
     case 'matrix':
       return (q.rows ?? []).map<Column>((row) => ({
         name: `${v}_${suffix(row.code)}`,
-        label: `${title}: ${row.label}`,
+        label: `${title}: ${plainText(row.label)}`,
         type,
         values: choiceValues(q.columns),
         get: (r) => pick(q.columns, (a(r) as Record<string, string> | undefined)?.[row.id]),
@@ -110,7 +111,7 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
     case 'rank':
       return (q.choices ?? []).map<Column>((c) => ({
         name: `${v}_${suffix(c.code)}`,
-        label: `${title}: ${c.label}`,
+        label: `${title}: ${plainText(c.label)}`,
         type,
         notes: 'Rank position, 1 = top',
         get: (r) => {
@@ -123,7 +124,7 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
     case 'constant_sum':
       return (q.choices ?? []).map<Column>((c) => ({
         name: `${v}_${suffix(c.code)}`,
-        label: `${title}: ${c.label}`,
+        label: `${title}: ${plainText(c.label)}`,
         type,
         notes: `Points allocated (target total ${q.validation?.total ?? 100})`,
         get: (r) => {
@@ -136,7 +137,7 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
       const s = q.scale ?? { min: 1, max: 5 };
       const values = [];
       for (let x = s.min, i = 0; x <= s.max; x++, i++) {
-        const label = s.pointLabels?.[i] || (x === s.min ? s.minLabel : x === s.max ? s.maxLabel : '') || '';
+        const label = plainText(s.pointLabels?.[i] || (x === s.min ? s.minLabel : x === s.max ? s.maxLabel : '') || '');
         values.push({ code: x, label });
       }
       return [
@@ -148,7 +149,7 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
           get: (r) => {
             const n = toNumber(a(r));
             if (n === null) return null;
-            if (mode === 'labels') return s.pointLabels?.[n - s.min] || n;
+            if (mode === 'labels') return plainText(s.pointLabels?.[n - s.min]) || n;
             return n;
           },
         },

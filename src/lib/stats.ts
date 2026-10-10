@@ -3,6 +3,7 @@
 import { isEmpty, toNumber } from './engine';
 import { scalePoints } from './questionTypes';
 import type { Question, SurveyResponse } from './types';
+import { plainText } from './markdown';
 
 export interface CountRow {
   id: string;
@@ -83,7 +84,7 @@ export function summarize(q: Question, responses: SurveyResponse[]): Summary {
       const multi = q.type === 'multi_choice';
       const rows = (q.choices ?? []).map((c) => {
         const n = answers.filter(({ v }) => (multi ? Array.isArray(v) && v.includes(c.id) : v === c.id)).length;
-        return { id: c.id, label: c.label, code: c.code, n, pct: pct(n, answered) };
+        return { id: c.id, label: plainText(c.label), code: c.code, n, pct: pct(n, answered) };
       });
       const others = responses.map((r) => r.otherText?.[q.id]).filter((s): s is string => !!s);
       return { kind: 'choice', answered, rows, others, multi };
@@ -94,7 +95,7 @@ export function summarize(q: Question, responses: SurveyResponse[]): Summary {
       const pts = q.type === 'nps' ? Array.from({ length: 11 }, (_, i) => ({ value: i, label: '' })) : scalePoints(q);
       const rows = pts.map((p) => {
         const n = values.filter((x) => x === p.value).length;
-        return { id: String(p.value), label: p.label ? `${p.value} · ${p.label}` : String(p.value), code: p.value, n, pct: pct(n, values.length) };
+        return { id: String(p.value), label: p.label ? `${p.value} · ${plainText(p.label)}` : String(p.value), code: p.value, n, pct: pct(n, values.length) };
       });
       const out: Summary = { kind: 'scale', answered, rows, stats: numericStats(values) };
       if (q.type === 'nps' && values.length) {
@@ -111,12 +112,12 @@ export function summarize(q: Question, responses: SurveyResponse[]): Summary {
       return { kind: 'numeric', answered, stats: numericStats(values), bins: histogram(values) };
     }
     case 'matrix': {
-      const columns = (q.columns ?? []).map((c) => ({ id: c.id, label: c.label, code: c.code }));
+      const columns = (q.columns ?? []).map((c) => ({ id: c.id, label: plainText(c.label), code: c.code }));
       const rows = (q.rows ?? []).map((row) => {
         const picked = answers.map(({ v }) => (v && typeof v === 'object' ? (v as Record<string, string>)[row.id] : undefined)).filter(Boolean);
         const counts = columns.map((c) => picked.filter((p) => p === c.id).length);
         const codes = picked.map((p) => columns.find((c) => c.id === p)?.code).filter((x): x is number => typeof x === 'number');
-        return { id: row.id, label: row.label, counts, n: picked.length, mean: codes.length ? codes.reduce((a, b) => a + b, 0) / codes.length : null };
+        return { id: row.id, label: plainText(row.label), counts, n: picked.length, mean: codes.length ? codes.reduce((a, b) => a + b, 0) / codes.length : null };
       });
       return { kind: 'matrix', answered, columns, rows };
     }
@@ -124,7 +125,7 @@ export function summarize(q: Question, responses: SurveyResponse[]): Summary {
       const items = (q.choices ?? []).map((c) => {
         const positions = answers.map(({ v }) => (Array.isArray(v) ? v.indexOf(c.id) : -1)).filter((i) => i >= 0);
         const meanRank = positions.length ? positions.reduce((a, b) => a + b + 1, 0) / positions.length : 0;
-        return { id: c.id, label: c.label, meanRank, firstPlace: positions.filter((i) => i === 0).length };
+        return { id: c.id, label: plainText(c.label), meanRank, firstPlace: positions.filter((i) => i === 0).length };
       });
       items.sort((a, b) => a.meanRank - b.meanRank);
       return { kind: 'rank', answered, items };
@@ -132,7 +133,7 @@ export function summarize(q: Question, responses: SurveyResponse[]): Summary {
     case 'constant_sum': {
       const items = (q.choices ?? []).map((c) => {
         const vals = answers.map(({ v }) => (v && typeof v === 'object' ? (toNumber((v as Record<string, number>)[c.id]) ?? 0) : 0));
-        return { id: c.id, label: c.label, mean: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0 };
+        return { id: c.id, label: plainText(c.label), mean: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0 };
       });
       return { kind: 'sum', answered, items };
     }

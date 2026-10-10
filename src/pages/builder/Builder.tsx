@@ -6,6 +6,7 @@ import { TYPE_INFO, cloneQuestion, createQuestion } from '../../lib/questionType
 import { newBlock } from '../../lib/templates';
 import type { Block, Question, QuestionType, Survey } from '../../lib/types';
 import type { Updater } from '../../lib/useUndoable';
+import { formatShortcut } from '../../components/formatText';
 import { BlockInspector, QuestionInspector, SurveyOverview } from './Inspector';
 import { describeLogic } from './LogicEditor';
 import { QuestionEditor, type QMutate } from './QuestionEditor';
@@ -282,7 +283,7 @@ export function Builder({ survey, update }: { survey: Survey; update: Updater<Su
         </nav>
       )}
 
-      <div className="canvas">
+      <div className="canvas" onKeyDownCapture={formatShortcut}>
         {survey.blocks.map((b, bi) => {
           const isSel = sel?.kind === 'block' && sel.id === b.id;
           const badges: string[] = [];
@@ -471,7 +472,7 @@ export function Builder({ survey, update }: { survey: Survey; update: Updater<Su
       </div>
 
       {wide && (
-        <aside className="inspector" aria-label="Settings for the selection" onClick={(e) => e.stopPropagation()}>
+        <aside className="inspector" aria-label="Settings for the selection" onClick={(e) => e.stopPropagation()} onKeyDownCapture={formatShortcut}>
           <div className="inspector-sticky">
             <h2 className="inspector-title">{selectedQ ? 'Question settings' : selectedBlock ? 'Block settings' : 'Overview'}</h2>
             {inspector}

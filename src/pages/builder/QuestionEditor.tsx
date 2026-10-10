@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
+import { applyMark, isFormattable, type Mark } from '../../components/formatText';
 import { AutoTextarea, Field, Icon, Menu, NumberInput, Toggle } from '../../components/ui';
 import { uid } from '../../lib/ids';
 import { SCALE_PRESETS, makeChoices } from '../../lib/questionTypes';
@@ -12,8 +13,20 @@ export function QuestionEditor({ survey, q, change }: { survey: Survey; q: Quest
   const lang = survey.settings.language;
   const isText = q.type === 'text_block';
   const selectedOnFocus = useRef(false);
+  // The text field last typed in, so the Bold/Italic buttons know where to act.
+  const lastField = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const format = (mark: Mark) => {
+    const el = lastField.current;
+    if (el && el.isConnected) applyMark(el, mark);
+  };
   return (
-    <div className="qedit" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="qedit"
+      onClick={(e) => e.stopPropagation()}
+      onFocusCapture={(e) => {
+        if (isFormattable(e.target)) lastField.current = e.target;
+      }}
+    >
       <AutoTextarea
         className="qedit-title"
         value={q.title}
@@ -40,9 +53,33 @@ export function QuestionEditor({ survey, q, change }: { survey: Survey; q: Quest
         onChange={(e) => change((x) => void (x.description = e.target.value), 'desc')}
       />
       <TypeContent survey={survey} q={q} change={change} lang={lang} />
-      <p className="hint qedit-hint">
-        Format with **bold**, *italic*, [links](https://…) and images ![description](https://…). Insert an earlier answer with {'{{'}variable{'}}'}.
-      </p>
+      <div className="qedit-format">
+        <span className="format-btns" role="group" aria-label="Text formatting">
+          <button
+            type="button"
+            className="format-btn"
+            title="Bold (Ctrl+B / ⌘B): select words in any text field above, then click"
+            aria-label="Bold"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => format('bold')}
+          >
+            <b>B</b>
+          </button>
+          <button
+            type="button"
+            className="format-btn"
+            title="Italic (Ctrl+I / ⌘I): select words in any text field above, then click"
+            aria-label="Italic"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => format('italic')}
+          >
+            <i>I</i>
+          </button>
+        </span>
+        <p className="hint qedit-hint">
+          Select words in the question, an option, a statement or a scale label, then press B or I (or Ctrl/⌘+B, Ctrl/⌘+I). They’re stored as **bold** and *italic*. Also: [links](https://…), images ![description](https://…), and earlier answers with {'{{'}variable{'}}'}.
+        </p>
+      </div>
     </div>
   );
 }

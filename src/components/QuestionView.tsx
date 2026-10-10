@@ -3,7 +3,7 @@ import { ordered } from '../lib/engine';
 import { t } from '../lib/i18n';
 import { scalePoints } from '../lib/questionTypes';
 import type { AnswerValue, Choice, Lang, Question } from '../lib/types';
-import { RichText } from './RichText';
+import { RichText, plainText } from './RichText';
 import { AutoTextarea, Button, Icon, IconButton, useMediaQuery } from './ui';
 
 export interface QuestionViewProps {
@@ -93,7 +93,7 @@ function Control(props: QuestionViewProps & { pipe: (s: string | undefined) => s
             <option value="">{t(lang, 'selectPlaceholder')}</option>
             {list.map((c) => (
               <option key={c.id} value={c.id}>
-                {pipe(c.label)}
+                {plainText(pipe(c.label))}
               </option>
             ))}
           </select>
@@ -177,7 +177,7 @@ function OtherInput(props: QuestionViewProps & { choice: Choice }) {
       className="input other-input"
       value={props.other ?? ''}
       placeholder={t(props.lang, 'otherPlaceholder')}
-      aria-label={`${props.choice.label}: ${t(props.lang, 'otherPlaceholder')}`}
+      aria-label={`${plainText(props.choice.label)}: ${t(props.lang, 'otherPlaceholder')}`}
       disabled={props.disabled}
       onChange={(e) => props.onOther(e.target.value)}
       // Opening the text box is a clear signal of intent; put the cursor there.
@@ -213,7 +213,7 @@ function Choices(props: QuestionViewProps & { multi: boolean; pipe: (s: string |
               <span className={`mark ${multi ? 'mark-square' : 'mark-round'}`} aria-hidden="true">
                 {multi && <Icon name="check" size={14} />}
               </span>
-              <span className="choice-label">{pipe(c.label)}</span>
+              <RichText as="span" className="choice-label" text={pipe(c.label)} />
             </label>
             {c.other && checked && <OtherInput {...props} choice={c} />}
           </div>
@@ -242,15 +242,15 @@ function ScaleControl(props: QuestionViewProps & { a11y: A11y; name: string }) {
         <div role="radiogroup" className="stars" {...a11y}>
           {pts.map((p) => (
             <label key={p.value} className={`star ${num !== null && p.value <= num ? 'is-on' : ''}`}>
-              <input type="radio" name={name} checked={num === p.value} disabled={disabled} onChange={() => onChange(p.value)} aria-label={p.label ? `${p.value}: ${p.label}` : String(p.value)} />
+              <input type="radio" name={name} checked={num === p.value} disabled={disabled} onChange={() => onChange(p.value)} aria-label={p.label ? `${p.value}: ${plainText(p.label)}` : String(p.value)} />
               <Icon name="star" size={34} />
             </label>
           ))}
         </div>
         {ends && (
           <div className="scale-ends">
-            <span>{s.minLabel}</span>
-            <span>{s.maxLabel}</span>
+            <RichText as="span" text={s.minLabel} />
+            <RichText as="span" text={s.maxLabel} />
           </div>
         )}
         {num !== null && !q.required && !disabled && (
@@ -269,20 +269,20 @@ function ScaleControl(props: QuestionViewProps & { a11y: A11y; name: string }) {
           const checked = num === p.value;
           return (
             <label key={p.value} className={`scale-pt ${checked ? 'is-checked' : ''}`}>
-              <input type="radio" name={name} checked={checked} disabled={disabled} onChange={() => onChange(p.value)} aria-label={p.label ? `${p.value}: ${p.label}` : String(p.value)} />
+              <input type="radio" name={name} checked={checked} disabled={disabled} onChange={() => onChange(p.value)} aria-label={p.label ? `${p.value}: ${plainText(p.label)}` : String(p.value)} />
               <span className="mark mark-round mark-num" aria-hidden="true">
                 {p.value}
               </span>
-              {allLabeled && <span className="scale-pt-label">{p.label}</span>}
+              {allLabeled && <RichText as="span" className="scale-pt-label" text={p.label} />}
             </label>
           );
         })}
       </div>
       {ends && (
         <div className="scale-ends" aria-hidden="true">
-          <span>{s.minLabel}</span>
-          {s.midLabel ? <span className="scale-mid">{s.midLabel}</span> : <span />}
-          <span>{s.maxLabel}</span>
+          {s.minLabel ? <RichText as="span" text={s.minLabel} /> : <span />}
+          {s.midLabel ? <RichText as="span" className="scale-mid" text={s.midLabel} /> : <span />}
+          {s.maxLabel ? <RichText as="span" text={s.maxLabel} /> : <span />}
         </div>
       )}
       {num !== null && !q.required && !disabled && (
@@ -306,8 +306,10 @@ function Matrix(props: QuestionViewProps & { a11y: A11y; name: string; pipe: (s:
     return (
       <div className="mx-stack" {...a11y} role="group">
         {rows.map((row) => (
-          <div key={row.id} className={`mx-card ${error && !rec[row.id] ? 'is-missing' : ''}`} role="radiogroup" aria-label={row.label}>
-            <p className="mx-row-label">{pipe(row.label)}</p>
+          <div key={row.id} className={`mx-card ${error && !rec[row.id] ? 'is-missing' : ''}`} role="radiogroup" aria-label={plainText(pipe(row.label))}>
+            <p className="mx-row-label">
+              <RichText as="span" text={pipe(row.label)} />
+            </p>
             <div className="choices">
               {cols.map((col) => {
                 const checked = rec[row.id] === col.id;
@@ -316,7 +318,7 @@ function Matrix(props: QuestionViewProps & { a11y: A11y; name: string; pipe: (s:
                     <label className="choice-hit">
                       <input type="radio" name={`${name}-${row.id}`} checked={checked} disabled={disabled} onChange={() => set(row.id, col.id)} />
                       <span className="mark mark-round" aria-hidden="true" />
-                      <span className="choice-label">{col.label}</span>
+                      <RichText as="span" className="choice-label" text={col.label} />
                     </label>
                   </div>
                 );
@@ -338,7 +340,7 @@ function Matrix(props: QuestionViewProps & { a11y: A11y; name: string; pipe: (s:
             </th>
             {cols.map((c) => (
               <th scope="col" key={c.id}>
-                {c.label}
+                <RichText as="span" text={c.label} />
               </th>
             ))}
           </tr>
@@ -346,13 +348,15 @@ function Matrix(props: QuestionViewProps & { a11y: A11y; name: string; pipe: (s:
         <tbody>
           {rows.map((row) => (
             <tr key={row.id} className={error && !rec[row.id] ? 'is-missing' : ''}>
-              <th scope="row">{pipe(row.label)}</th>
+              <th scope="row">
+                <RichText as="span" text={pipe(row.label)} />
+              </th>
               {cols.map((col) => {
                 const checked = rec[row.id] === col.id;
                 return (
                   <td key={col.id}>
                     <label className={`mx-cell ${checked ? 'is-checked' : ''}`}>
-                      <input type="radio" name={`${name}-${row.id}`} checked={checked} disabled={disabled} onChange={() => set(row.id, col.id)} aria-label={`${row.label}: ${col.label}`} />
+                      <input type="radio" name={`${name}-${row.id}`} checked={checked} disabled={disabled} onChange={() => set(row.id, col.id)} aria-label={`${plainText(pipe(row.label))}: ${plainText(col.label)}`} />
                       <span className="mark mark-round" aria-hidden="true" />
                     </label>
                   </td>
@@ -397,8 +401,8 @@ function Slider(props: QuestionViewProps & { a11y: A11y }) {
         {...a11y}
       />
       <div className="scale-ends">
-        <span>{s.minLabel || s.min}</span>
-        <span>{s.maxLabel || s.max}</span>
+        <RichText as="span" text={s.minLabel || String(s.min)} />
+        <RichText as="span" text={s.maxLabel || String(s.max)} />
       </div>
       {num === null && <p className="hint slider-hint">{t(lang, 'sliderUnanswered')}</p>}
     </div>
@@ -426,10 +430,10 @@ function Rank(props: QuestionViewProps & { pipe: (s: string | undefined) => stri
               <span className="mark mark-round mark-num is-filled" aria-hidden="true">
                 {i + 1}
               </span>
-              <span className="rank-label">{pipe(c.label)}</span>
+              <RichText as="span" className="rank-label" text={pipe(c.label)} />
               <span className="rank-actions">
-                <IconButton icon="up" size="sm" label={`${t(lang, 'moveUp')}: ${c.label}`} disabled={disabled || i === 0} onClick={() => move(i, i - 1)} />
-                <IconButton icon="down" size="sm" label={`${t(lang, 'moveDown')}: ${c.label}`} disabled={disabled || i === order.length - 1} onClick={() => move(i, i + 1)} />
+                <IconButton icon="up" size="sm" label={`${t(lang, 'moveUp')}: ${plainText(c.label)}`} disabled={disabled || i === 0} onClick={() => move(i, i - 1)} />
+                <IconButton icon="down" size="sm" label={`${t(lang, 'moveDown')}: ${plainText(c.label)}`} disabled={disabled || i === order.length - 1} onClick={() => move(i, i + 1)} />
               </span>
             </li>
           );
@@ -465,7 +469,7 @@ function ConstantSum(props: QuestionViewProps & { pipe: (s: string | undefined) 
     <div className="csum" role="group" {...a11y}>
       {ordered(q.choices, props.choiceOrder).map((c) => (
         <label key={c.id} className="csum-row">
-          <span className="csum-label">{pipe(c.label)}</span>
+          <RichText as="span" className="csum-label" text={pipe(c.label)} />
           <input
             className="input csum-input"
             inputMode="decimal"

@@ -1,3 +1,4 @@
+import { formatShortcut } from '../components/formatText';
 import { AutoTextarea, Field, NumberInput, Toggle } from '../components/ui';
 import { ACCENTS } from '../lib/templates';
 import type { Lang, Survey, SurveySettings } from '../lib/types';
@@ -11,7 +12,7 @@ export function SettingsTab({ survey, update }: { survey: Survey; update: Update
   const closeAtLocal = s.closeAt ? toLocalInput(s.closeAt) : '';
 
   return (
-    <div className="page-narrow settings-page">
+    <div className="page-narrow settings-page" onKeyDownCapture={formatShortcut}>
       <section className="panel">
         <header className="panel-head">
           <h2>General</h2>

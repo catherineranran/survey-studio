@@ -19,3 +19,9 @@ describe('RichText', () => {
     expect(html('a\nb\n\nc')).toBe('<div class="rich "><p>a<br/>b</p><p>c</p></div>');
   });
 });
+
+describe('RichText in labels', () => {
+  it('renders bold inside an inline label', () => {
+    expect(renderToStaticMarkup(<RichText as="span" className="choice-label" text="**angry**" />)).toBe('<span class="choice-label"><strong>angry</strong></span>');
+  });
+});

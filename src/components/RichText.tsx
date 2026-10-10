@@ -1,4 +1,7 @@
 import { Fragment, type ReactNode } from 'react';
+import { INLINE } from '../lib/markdown';
+
+export { plainText } from '../lib/markdown';
 
 // A deliberately tiny, safe Markdown subset for question text and messages:
 // paragraphs (blank line), line breaks, **bold**, *italic* / _italic_,
@@ -6,7 +9,6 @@ import { Fragment, type ReactNode } from 'react';
 // elements, never raw HTML, so piped answers from respondents can't inject markup.
 // Underscores inside words (snake_case, panel IDs) are left alone.
 
-const INLINE = /(!\[[^\]]*\]\([^)\s]+\)|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|(?<![A-Za-z0-9])_[^_\s][^_]*_(?![A-Za-z0-9])|\[[^\]]+\]\([^)\s]+\))/g;
 
 function safeHref(href: string): string | null {
   return /^(https?:|mailto:)/i.test(href) ? href : null;
@@ -71,3 +73,4 @@ export function RichText({ text, className, as = 'div', id }: { text: string | u
     </div>
   );
 }
+
