@@ -49,6 +49,7 @@ const OP_LABEL: Record<Operator, string> = {
 
 export function operatorsFor(q?: Question, randomizer?: Randomizer): Operator[] {
   if (randomizer) return randomizer.present > 1 ? ['includes', 'excludes'] : ['is', 'is_not'];
+  if (q?.type === 'video') return ['answered', 'not_answered', 'gte', 'lt'];
   if (!q) return ['equals_text', 'contains', 'not_contains', 'answered', 'not_answered', 'eq', 'gt', 'lt'];
   switch (q.type) {
     case 'single_choice':
@@ -73,6 +74,17 @@ export function operatorsFor(q?: Question, randomizer?: Randomizer): Operator[] 
   }
 }
 
+/** How an operator reads for a question; videos speak of playing and seconds. */
+export function opLabel(op: Operator, q?: Question): string {
+  if (q?.type === 'video') {
+    if (op === 'answered') return 'was played';
+    if (op === 'not_answered') return 'was not played';
+    if (op === 'gte') return 'played for at least (seconds)';
+    if (op === 'lt') return 'played for less than (seconds)';
+  }
+  return OP_LABEL[op];
+}
+
 export function describeCondition(c: Condition, survey: Survey): string {
   if (c.source.startsWith('param:')) return `${c.source.slice(6)} ${OP_LABEL[c.operator]}${needsValue(c.operator) ? ` “${c.value ?? ''}”` : ''}`;
   const q = survey.blocks.flatMap((b) => b.questions).find((x) => x.id === c.source);
@@ -82,7 +94,7 @@ export function describeCondition(c: Condition, survey: Survey): string {
   const choice = list?.find((x) => x.id === c.value);
   if (choice) value = choice.label;
   const row = q.type === 'matrix' ? q.rows?.find((r) => r.id === c.rowId)?.label : undefined;
-  return `${q.variable}${row ? ` (${row})` : ''} ${OP_LABEL[c.operator]}${needsValue(c.operator) ? ` “${value}”` : ''}`;
+  return `${q.variable}${row ? ` (${row})` : ''} ${opLabel(c.operator, q)}${needsValue(c.operator) ? ` “${value}”` : ''}`;
 }
 
 export function describeLogic(logic: Logic | null | undefined, survey: Survey): string {
@@ -225,7 +237,7 @@ function ConditionRow({
         >
           {ops.map((op) => (
             <option key={op} value={op}>
-              {OP_LABEL[op]}
+              {opLabel(op, q)}
             </option>
           ))}
         </select>
@@ -280,7 +292,7 @@ function ValueInput({ c, q, randomizer, onChange }: { c: Condition; q?: Question
       </select>
     );
   }
-  const numeric = q ? ['slider', 'number', 'matrix'].includes(q.type) : ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(c.operator);
+  const numeric = q ? ['slider', 'number', 'matrix', 'video'].includes(q.type) : ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(c.operator);
   if (numeric) {
     return <NumberInput className="input-sm cond-value" value={typeof c.value === 'number' ? c.value : c.value ? Number(c.value) : null} onChange={(v) => onChange({ ...c, value: v ?? undefined })} ariaLabel="Value" />;
   }

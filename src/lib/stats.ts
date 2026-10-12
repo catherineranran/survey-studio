@@ -1,6 +1,6 @@
 // Per-question summaries for the results page.
 
-import { isEmpty, toNumber } from './engine';
+import { isEmpty, toNumber, videoAnswer } from './engine';
 import { scalePoints } from './questionTypes';
 import type { Question, SurveyResponse } from './types';
 import { plainText } from './markdown';
@@ -77,6 +77,17 @@ export function summarize(q: Question, responses: SurveyResponse[]): Summary {
   switch (q.type) {
     case 'text_block':
       return { kind: 'none' };
+    case 'video': {
+      const vals = answers.map(({ v }) => videoAnswer(v)).filter((x): x is NonNullable<typeof x> => !!x);
+      const ended = vals.filter((x) => x.end).length;
+      const failed = vals.filter((x) => !x.end && x.err).length;
+      const rows = [
+        { id: 'end', label: 'Watched to the end', code: 1, n: ended, pct: pct(ended, vals.length) },
+        { id: 'part', label: 'Stopped before the end', code: 0, n: vals.length - ended - failed, pct: pct(vals.length - ended - failed, vals.length) },
+        { id: 'err', label: 'Couldn’t play', code: -1, n: failed, pct: pct(failed, vals.length) },
+      ];
+      return { kind: 'scale', answered: vals.length, rows, stats: numericStats(vals.map((x) => x.sec)) };
+    }
     case 'single_choice':
     case 'dropdown':
     case 'consent':

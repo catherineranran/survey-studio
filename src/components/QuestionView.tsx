@@ -2,9 +2,11 @@ import { useId, type CSSProperties } from 'react';
 import { ordered } from '../lib/engine';
 import { t } from '../lib/i18n';
 import { scalePoints } from '../lib/questionTypes';
-import type { AnswerValue, Choice, Lang, Question } from '../lib/types';
+import type { AnswerValue, Choice, Lang, Question, VideoAnswer } from '../lib/types';
+import { parseVideoLink } from '../lib/video';
 import { RichText, plainText } from './RichText';
 import { AutoTextarea, Button, Icon, IconButton, useMediaQuery } from './ui';
+import { VideoPlayer } from './VideoPlayer';
 
 export interface QuestionViewProps {
   q: Question;
@@ -166,9 +168,31 @@ function Control(props: QuestionViewProps & { pipe: (s: string | undefined) => s
       );
     case 'date':
       return <input className="input input-date" type="date" value={(value as string) ?? ''} disabled={disabled} onChange={(e) => onChange(e.target.value || undefined)} {...a11y} />;
+    case 'video':
+      // The builder canvas shows what will play without loading it.
+      if (disabled || !q.video || !parseVideoLink(q.video.src)) return <VideoPlaceholder q={q} />;
+      return <VideoPlayer settings={q.video} lang={lang} value={value as VideoAnswer | undefined} onChange={onChange} labelledBy={a11y['aria-labelledby']} />;
     default:
       return null;
   }
+}
+
+function VideoPlaceholder({ q }: { q: Question }) {
+  const v = q.video;
+  const link = parseVideoLink(v?.src);
+  let name = link ? (link.kind === 'file' ? link.url : link.manifestUrl).split('/').slice(-2).join('/') : '';
+  try {
+    name = decodeURIComponent(name);
+  } catch {
+    /* shown as it is */
+  }
+  return (
+    <div className="vp-placeholder">
+      <Icon name="play" size={26} />
+      <span className="vp-placeholder-title">{!v?.src?.trim() ? 'No video yet' : !link ? 'This video link doesn’t work' : v.view === 'wrap' ? `Magic window: ${v.span}° picture, ${v.fov}° visible` : 'Video'}</span>
+      {name && <span className="vp-placeholder-src">{name}</span>}
+    </div>
+  );
 }
 
 function OtherInput(props: QuestionViewProps & { choice: Choice }) {

@@ -8,6 +8,7 @@ import {
   codebookMarkdown,
   fileSlug,
   responsesJSON,
+  withoutVideoKeys,
   responsesTable,
   responsesToCSV,
   spssSyntax,
@@ -610,7 +611,7 @@ function ExportPanel({ survey, responses, includePreviewDefault }: { survey: Sur
           <Button icon="file" onClick={() => downloadFile(`${slug}-labels.sps`, spssSyntax(survey, opts), 'text/plain;charset=utf-8')}>
             SPSS label syntax
           </Button>
-          <Button icon="file" onClick={() => downloadFile(`${slug}.survey.json`, JSON.stringify(survey, null, 2), 'application/json')}>
+          <Button icon="file" onClick={() => downloadFile(`${slug}.survey.json`, JSON.stringify(withoutVideoKeys(survey), null, 2), 'application/json')}>
             Survey definition (JSON)
           </Button>
         </div>

@@ -5,6 +5,7 @@ import { uid } from '../../lib/ids';
 import { SCALE_PRESETS, makeChoices } from '../../lib/questionTypes';
 import type { Choice, Lang, Question, Survey } from '../../lib/types';
 import { MediaDialog } from './MediaDialog';
+import { VideoEditor } from './VideoEditor';
 
 const DEFAULT_TITLES = new Set(['Untitled question', 'Neue Frage', 'Instructions', 'Hinweise']);
 
@@ -97,6 +98,8 @@ export function QuestionEditor({ survey, q, change }: { survey: Survey; q: Quest
 function TypeContent({ q, change, lang }: { survey: Survey; q: Question; change: QMutate; lang: Lang }) {
   const setChoices = (key: 'choices' | 'rows' | 'columns') => (list: Choice[]) => change((x) => void (x[key] = list), key);
   switch (q.type) {
+    case 'video':
+      return <VideoEditor q={q} change={change} />;
     case 'single_choice':
     case 'multi_choice':
     case 'dropdown':

@@ -3,6 +3,7 @@
 import { allQuestions } from './engine';
 import { buildColumns } from './export';
 import { placeOf } from './flow';
+import { parseVideoLink } from './video';
 import { RESERVED_NAMES, VARIABLE_RE } from './ids';
 import { TYPE_INFO } from './questionTypes';
 import type { Logic, Question, Survey } from './types';
@@ -74,6 +75,15 @@ export function lintSurvey(s: Survey): Issue[] {
     if ((q.type === 'rating_scale' || q.type === 'slider') && q.scale && q.scale.min >= q.scale.max) err(`${label}: the lowest value must be below the highest.`, where);
     if (q.type === 'slider' && q.scale && (q.scale.step ?? 1) <= 0) err(`${label}: the step must be above zero.`, where);
     if (q.type === 'rating_scale' && q.scale && q.scale.max - q.scale.min > 10) warn(`${label} has more than 11 points; consider a slider.`, where);
+    if (q.type === 'video') {
+      const src = q.video?.src?.trim();
+      const link = parseVideoLink(src);
+      if (!src) err(`${label} has no video yet. Add a video link.`, where);
+      else if (!link) err(`${label}: the video link should start with https:// and end in .mp4, .webm or .mov, or be a video folder link (…/video.json).`, where);
+      else if (/^http:/i.test(src)) err(`${label}: the video link points to this computer (localhost), so respondents can’t load it.`, where);
+      else if (link.kind === 'file' && q.video?.view === 'wrap' && typeof window !== 'undefined' && new URL(link.url).origin !== window.location.origin)
+        warn(`${label} plays a video from another website as a magic window. That only works if the site allows it (CORS); check it in the preview.`, where);
+    }
     const v = q.validation;
     if (q.type === 'short_text' && v?.format === 'regex') {
       if (!v.pattern) err(`${label} checks a pattern but none is set.`, where);

@@ -4,8 +4,13 @@ import { lintSurvey } from './lint';
 import { TEMPLATES } from './templates';
 
 describe('templates', () => {
-  it('have no errors', () => {
-    for (const t of TEMPLATES) expect([t.id, lintSurvey(t.build('s1')).filter((i) => i.level === 'error')]).toEqual([t.id, []]);
+  it('have no errors, apart from video links still to add', () => {
+    for (const t of TEMPLATES) {
+      const errors = lintSurvey(t.build('s1')).filter((i) => i.level === 'error' && !/has no video yet/.test(i.message));
+      expect([t.id, errors]).toEqual([t.id, []]);
+    }
+    const video = lintSurvey(TEMPLATES.find((t) => t.id === 'video-experiment')!.build('s1'));
+    expect(video.filter((i) => /has no video yet/.test(i.message))).toHaveLength(2);
   });
 
   it('video experiment: everyone gets the same questionnaire, minus the video questions for the vignette group', () => {
@@ -28,10 +33,12 @@ describe('templates', () => {
     expect(vignette).not.toContain('video_quality');
     expect(vignette).not.toContain('watched_all');
     expect(vignette).toContain('Please read carefully');
+    expect(video).toContain('video_ai');
+    expect(vignette).not.toContain('video_ai');
     for (const v of ['realism', 'resp', 'manip_check', 'age', 'gender']) {
       expect(video).toContain(v);
       expect(vignette).toContain(v);
     }
-    expect(seen('Captured video')).toEqual(video);
+    expect(seen('Captured video')).toEqual(video.map((v) => (v === 'video_ai' ? 'video_captured' : v)));
   });
 });

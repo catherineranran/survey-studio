@@ -63,7 +63,12 @@ export function QuestionInspector({
             {q.type === 'consent' ? (
               <p className="hint">Consent is always required: respondents choose agree or decline before they continue.</p>
             ) : (
-              <Toggle label="Required" checked={q.required} onChange={(on) => change((x) => void (x.required = on))} />
+              <Toggle
+                label="Required"
+                hint={q.type === 'video' ? 'Respondents continue once they’ve watched the video to the end.' : undefined}
+                checked={q.required}
+                onChange={(on) => change((x) => void (x.required = on))}
+              />
             )}
           </>
         )}

@@ -19,6 +19,7 @@ const GLYPH: Record<QuestionType, string> = {
   consent: '✓ ✗',
   constant_sum: 'Σ',
   text_block: 'T',
+  video: '▶ ◐',
 };
 
 export function TypePicker({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (t: QuestionType) => void }) {

@@ -19,7 +19,8 @@ export type QuestionType =
   | 'rank'
   | 'constant_sum'
   | 'consent'
-  | 'text_block';
+  | 'text_block'
+  | 'video';
 
 export type Lang = 'en' | 'de';
 
@@ -96,6 +97,39 @@ export interface Logic {
   conditions: Condition[];
 }
 
+/** How a video question shows its video. */
+export interface VideoSettings {
+  /**
+   * A video file on the web (.mp4, .webm, .mov), or the link to a Survey Studio video
+   * folder (…/video.json), with `#k=<key>` when its files are encrypted.
+   */
+  src: string;
+  /** 'flat': an ordinary video. 'wrap': a magic window into a picture that wraps around the viewer. */
+  view: 'flat' | 'wrap';
+  /** wrap: how far the picture reaches around the viewer, in degrees (140, 180, 360 …). */
+  span: number;
+  /** wrap: how much of it is visible at once, across, in degrees. */
+  fov: number;
+  /** wrap: on phones and tablets, moving the device looks around too. */
+  tilt?: boolean;
+}
+
+/** What a video question records for each respondent. */
+export interface VideoAnswer {
+  /** Seconds of the video played, replays included. */
+  sec: number;
+  /** Reached the end at least once. */
+  end: boolean;
+  /**
+   * wrap view: where the respondent looked during each second of the video, as
+   * [yaw, pitch] in degrees from straight ahead (yaw > 0 right, pitch > 0 up);
+   * null for seconds they didn't watch.
+   */
+  look?: ([number, number] | null)[];
+  /** Why the video couldn't be played. Respondents can continue anyway. */
+  err?: string;
+}
+
 export interface Question {
   id: string;
   type: QuestionType;
@@ -119,6 +153,8 @@ export interface Question {
   /** Consent: end the survey when the second option ("I do not agree") is chosen. */
   endOnDecline?: boolean;
   declineMessage?: string;
+  /** Video questions. `required` means: watched to the end. */
+  video?: VideoSettings;
 }
 
 export interface Branch {
@@ -246,7 +282,8 @@ export type AnswerValue =
   | boolean
   | string[]
   | Record<string, string>
-  | Record<string, number>;
+  | Record<string, number>
+  | VideoAnswer;
 
 export interface ResponseMeta {
   /** 'complete', or the end tag of the branch that ended the survey (e.g. 'screened_out'). */

@@ -2,18 +2,7 @@
 // piping and answer clean-up. Pure functions, no UI, fully unit-tested.
 
 import { t } from './i18n';
-import type {
-  AnswerValue,
-  Block,
-  Choice,
-  Condition,
-  Lang,
-  Logic,
-  Question,
-  Randomizer,
-  RandomizerArm,
-  Survey,
-} from './types';
+import type { AnswerValue, Block, Choice, Condition, Lang, Logic, Question, Randomizer, RandomizerArm, Survey, VideoAnswer } from './types';
 
 /* ------------------------------------------------------------------ random */
 
@@ -276,7 +265,13 @@ function choiceCode(list: Choice[] | undefined, id: unknown): number | null {
 }
 
 /** Numeric reading of an answer: choice codes for choice questions, the number itself otherwise. */
+/** A video question's answer, if the value is one. */
+export function videoAnswer(v: unknown): VideoAnswer | null {
+  return v && typeof v === 'object' && !Array.isArray(v) && typeof (v as VideoAnswer).sec === 'number' ? (v as VideoAnswer) : null;
+}
+
 function numericValue(q: Question, v: unknown, lang?: Lang): number | null {
+  if (q.type === 'video') return videoAnswer(v)?.sec ?? null;
   if (q.type === 'single_choice' || q.type === 'dropdown' || q.type === 'consent') return choiceCode(q.choices, v);
   if (q.type === 'matrix') return choiceCode(q.columns, v);
   return toNumber(v, lang);
@@ -299,7 +294,9 @@ export function evalCondition(c: Condition, ctx: Ctx): boolean {
   if (!q) return false;
   let v: unknown = ctx.answers[q.id];
   if (q.type === 'matrix' && c.rowId) v = (v as Record<string, string> | undefined)?.[c.rowId];
-  return compare(c, v, !isEmpty(v), numericValue(q, v, ctx.lang), ctx.lang);
+  // A video counts as answered once some of it has played (not when it failed to load).
+  const answered = q.type === 'video' ? (videoAnswer(v)?.sec ?? 0) > 0 : !isEmpty(v);
+  return compare(c, v, answered, numericValue(q, v, ctx.lang), ctx.lang);
 }
 
 function compare(c: Condition, v: unknown, answered: boolean, num: number | null, lang?: Lang): boolean {
@@ -523,6 +520,11 @@ export function validateAnswer(
   switch (q.type) {
     case 'text_block':
       return null;
+    case 'video': {
+      // Watched to the end, or it couldn't be played (respondents are never stuck).
+      const x = videoAnswer(value);
+      return !req || (x && (x.end || x.err)) ? null : t(lang, 'errVideo');
+    }
     case 'short_text':
     case 'long_text': {
       const s = typeof value === 'string' ? value.trim() : '';
@@ -637,6 +639,12 @@ export function answerText(q: Question, value: unknown, other?: string): string 
       const idx = Number(value) - (q.scale?.min ?? 0);
       const pl = q.scale?.pointLabels?.[idx];
       return pl ? pl : String(value);
+    }
+    case 'video': {
+      const x = videoAnswer(value);
+      if (!x) return '';
+      if (x.err && !x.end) return `Couldn’t play (${x.err})`;
+      return `${x.end ? 'Watched to the end' : 'Stopped before the end'}, ${Math.round(x.sec)} s played`;
     }
     default:
       return String(value);

@@ -4162,3 +4162,243 @@ input:focus-visible + .mark {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* -------------------------------------------------------- video questions */
+
+.vp {
+  display: grid;
+  gap: 8px;
+}
+
+.vp-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  max-height: 78vh;
+  overflow: hidden;
+  background: #05080d;
+  border-radius: var(--r-m);
+}
+
+.vp-flat .vp-stage {
+  aspect-ratio: 16 / 9;
+}
+
+@media (max-width: 640px) {
+  .vp-wrap .vp-stage {
+    aspect-ratio: 3 / 4;
+    max-height: 70vh;
+  }
+}
+
+.vp-canvas {
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+
+.vp-canvas:active {
+  cursor: grabbing;
+}
+
+.vp-canvas:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+
+/* The magic window draws the video; the element itself stays out of sight. */
+.vp-source {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.vp-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.vp-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 16px;
+  font-size: 15px;
+  text-align: center;
+  color: #f2f5fa;
+  background: rgb(5 8 13 / 0.55);
+}
+
+.vp-overlay p {
+  max-width: 36ch;
+}
+
+.vp-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 26px;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.35);
+  cursor: pointer;
+}
+
+.vp-play:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+.vp-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgb(255 255 255 / 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.vp-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.vp-btn {
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  cursor: pointer;
+}
+
+.vp-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.vp-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.vp-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.vp-time {
+  margin-left: auto;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+.vp-track {
+  flex: 1 1 100%;
+  height: 4px;
+  overflow: hidden;
+  background: var(--line-2);
+  border-radius: 2px;
+}
+
+.vp-track > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.vp-hint {
+  font-size: 14px;
+  color: var(--ink-3);
+}
+
+/* Full screen, or filling the window where full screen isn't available (iPhone). */
+.vp.is-full {
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  height: 100%;
+  padding: 10px;
+  background: #05080d;
+}
+
+.vp.is-fill {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.vp.is-full .vp-stage {
+  height: 100%;
+  max-height: none;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+
+.vp.is-full .vp-btn {
+  color: #f2f5fa;
+  background: #15243b;
+  border-color: #283447;
+}
+
+.vp.is-full .vp-time,
+.vp.is-full .vp-hint {
+  color: #c6d1df;
+}
+
+body.vp-filled {
+  overflow: hidden;
+}
+
+.video-wait {
+  margin-top: 10px;
+  font-size: 15px;
+  text-align: right;
+  color: var(--ink-2);
+}
+
+/* In the builder the video isn't loaded; this stands in for it. */
+.vp-placeholder {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 28px 16px;
+  text-align: center;
+  color: #d6e1ef;
+  background: #0b1019;
+  border-radius: var(--r-m);
+}
+
+.vp-placeholder-title {
+  font-weight: 650;
+}
+
+.vp-placeholder-src {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: #9cb0c8;
+  overflow-wrap: anywhere;
+}
+
+.video-edit {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+}

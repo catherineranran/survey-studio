@@ -252,6 +252,17 @@ describe('validation', () => {
     expect(validateAnswer(code, 'AB123', undefined, 'en')).toBeNull();
   });
 
+  it('holds a required video until it has been watched to the end, or couldn’t play', () => {
+    const v = make('video');
+    expect(v.required).toBe(true);
+    expect(validateAnswer(v, undefined, undefined, 'en')).toMatch(/watch the video/);
+    expect(validateAnswer(v, { sec: 40, end: false }, undefined, 'en')).toMatch(/watch the video/);
+    expect(validateAnswer(v, { sec: 89, end: true }, undefined, 'en')).toBeNull();
+    expect(validateAnswer(v, { sec: 0, end: false, err: 'no WebGL' }, undefined, 'en')).toBeNull();
+    expect(validateAnswer(v, undefined, undefined, 'en', { skipRequired: true })).toBeNull();
+    expect(validateAnswer({ ...v, required: false }, undefined, undefined, 'de')).toBeNull();
+  });
+
   it('lets a preview skip required questions but still checks answers that are given', () => {
     const skip = { skipRequired: true };
     const email = make('short_text', { required: true, validation: { format: 'email' } });

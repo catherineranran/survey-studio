@@ -1,7 +1,7 @@
 // Turns responses into analysis-ready files: wide CSV (labels or numeric codes),
 // a codebook, SPSS label syntax and raw JSON.
 
-import { allQuestions, isEmpty, toNumber } from './engine';
+import { allQuestions, isEmpty, toNumber, videoAnswer } from './engine';
 import { toVariable } from './ids';
 import { plainText } from './markdown';
 import { TYPE_INFO } from './questionTypes';
@@ -60,6 +60,40 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
   switch (q.type) {
     case 'text_block':
       return [];
+    case 'video': {
+      const va = (r: SurveyResponse) => videoAnswer(a(r));
+      const ended = [
+        { code: 1, label: 'Watched to the end' },
+        { code: 0, label: 'Stopped before the end' },
+      ];
+      const cols: Column[] = [
+        { name: `${v}_sec`, label: `${title} (seconds played)`, type, notes: 'Seconds of the video played, replays included; empty if it wasn’t played', get: (r) => va(r)?.sec ?? null },
+        {
+          name: `${v}_end`,
+          label: `${title} (watched to the end)`,
+          type,
+          values: ended,
+          get: (r) => {
+            const x = va(r);
+            if (!x) return null;
+            return mode === 'codes' ? (x.end ? 1 : 0) : ended[x.end ? 0 : 1].label;
+          },
+        },
+      ];
+      if (q.video?.view === 'wrap')
+        cols.push({
+          name: `${v}_look`,
+          label: `${title} (where they looked, each second)`,
+          type,
+          notes: 'JSON list with one [yaw, pitch] per second of the video, in degrees from straight ahead (yaw > 0 right, pitch > 0 up); null for seconds not watched',
+          get: (r) => {
+            const look = va(r)?.look;
+            return look ? JSON.stringify(look) : null;
+          },
+        });
+      cols.push({ name: `${v}_error`, label: `${title} (playback problem)`, type, notes: 'Why the video couldn’t be played; empty when it played', get: (r) => va(r)?.err ?? null });
+      return cols;
+    }
     case 'single_choice':
     case 'dropdown':
     case 'consent':
@@ -314,8 +348,18 @@ export function spssSyntax(survey: Survey, opts: Pick<ExportOptions, 'includePre
   return out.join('\n');
 }
 
+/**
+ * The survey without the keys of encrypted videos, for files that may be shared with the
+ * data (an open-data repository shouldn't hand out the stimuli). Survey backups keep them.
+ */
+export function withoutVideoKeys(survey: Survey): Survey {
+  const copy: Survey = JSON.parse(JSON.stringify(survey));
+  for (const b of copy.blocks) for (const q of b.questions) if (q.video?.src) q.video.src = q.video.src.replace(/#.*$/, '');
+  return copy;
+}
+
 export function responsesJSON(survey: Survey, responses: SurveyResponse[], includePreview: boolean): string {
-  return JSON.stringify({ survey, responses: filterResponses(responses, includePreview), exportedAt: new Date().toISOString() }, null, 2);
+  return JSON.stringify({ survey: withoutVideoKeys(survey), responses: filterResponses(responses, includePreview), exportedAt: new Date().toISOString() }, null, 2);
 }
 
 export function fileSlug(title: string): string {

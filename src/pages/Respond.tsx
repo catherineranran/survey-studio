@@ -17,6 +17,7 @@ import {
   remainingPages,
   stepAtBlock,
   validateAnswer,
+  videoAnswer,
   visibleQuestions,
   type AssignmentCounts,
   type Ctx,
@@ -26,7 +27,8 @@ import {
 } from '../lib/engine';
 import { t } from '../lib/i18n';
 import { TYPE_INFO } from '../lib/questionTypes';
-import type { AnswerValue, Lang, ResponseData, Survey } from '../lib/types';
+import type { AnswerValue, Lang, Question, ResponseData, Survey } from '../lib/types';
+import { prefetchVideo } from '../lib/video';
 
 type Phase =
   | { kind: 'loading' }
@@ -89,6 +91,9 @@ function urlParams(): URLSearchParams {
   if (i >= 0) new URLSearchParams(h.slice(i + 1)).forEach((v, k) => out.set(k, v));
   return out;
 }
+
+/** Videos and text blocks don't get a question number. */
+const numbered = (q: Question) => TYPE_INFO[q.type].answerable && q.type !== 'video';
 
 function browserLang(): Lang {
   return typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('de') ? 'de' : 'en';
@@ -237,6 +242,17 @@ export function Respond({ surveyId, previewSurvey, previewOptions }: RespondProp
     [rt, index],
   );
   const ectx: Ctx | null = useMemo(() => (rt && ctx ? effectiveCtx(rt.plan, ctx, rt.history) : null), [rt, ctx]);
+
+  /* ------------------------------------------- videos load in advance */
+  // Once the respondent starts, the videos on their path begin to load, so they're
+  // ready (or nearly) by the time they get there.
+  const prefetched = useRef(false);
+  useEffect(() => {
+    if (!rt || phase.kind !== 'page' || prefetched.current) return;
+    prefetched.current = true;
+    for (const id of rt.plan.blockOrder)
+      for (const q of rt.survey.blocks.find((b) => b.id === id)?.questions ?? []) if (q.type === 'video' && q.video?.src) prefetchVideo(q.video.src);
+  }, [rt, phase.kind]);
 
   /* ---------------------------------------------------- save progress */
   useEffect(() => {
@@ -428,12 +444,25 @@ export function Respond({ surveyId, previewSurvey, previewOptions }: RespondProp
   const total = phase.kind === 'done' ? done + 1 : done + 1 + ahead;
   const completed = phase.kind === 'done' ? total : done;
 
+  // A required video holds the page until it has been watched (or can't play here).
+  const declinesConsent = questions.some(
+    (q) => q.type === 'consent' && q.endOnDecline !== false && q.choices && q.choices.length > 1 && rt.answers[q.id] === q.choices[1].id,
+  );
+  const waitingForVideo =
+    !(preview && previewOptions?.skipRequired) &&
+    !declinesConsent &&
+    questions.some((q) => {
+      if (q.type !== 'video' || !q.required) return false;
+      const a = videoAnswer(rt.answers[q.id]);
+      return !(a?.end || a?.err);
+    });
+
   // Question numbers continue across pages.
   let numberOffset = 0;
   if (s.numberQuestions) {
     for (const hp of rt.history.slice(0, -1)) {
       const p = pageAt(rt.plan, ectx, hp);
-      if (p) numberOffset += visibleQuestions(p, ectx).filter((q) => TYPE_INFO[q.type].answerable).length;
+      if (p) numberOffset += visibleQuestions(p, ectx).filter(numbered).length;
     }
   }
   let localNumber = 0;
@@ -493,7 +522,7 @@ export function Respond({ surveyId, previewSurvey, previewOptions }: RespondProp
               </div>
             )}
             {questions.map((q) => {
-              const answerable = TYPE_INFO[q.type].answerable;
+              const answerable = numbered(q);
               if (answerable) localNumber++;
               return (
                 <QuestionView
@@ -520,10 +549,15 @@ export function Respond({ surveyId, previewSurvey, previewOptions }: RespondProp
               ) : (
                 <span />
               )}
-              <Button variant="primary" type="submit" disabled={submitting}>
+              <Button variant="primary" type="submit" disabled={submitting || waitingForVideo} aria-describedby={waitingForVideo ? 'video-wait' : undefined}>
                 {submitting ? t(lang, 'submitting') : isLast ? t(lang, 'submit') : t(lang, 'next')}
               </Button>
             </div>
+            {waitingForVideo && (
+              <p className="video-wait" id="video-wait">
+                {t(lang, 'videoWait')}
+              </p>
+            )}
             {submitError && (
               <p className="submit-error" role="alert">
                 {submitError}

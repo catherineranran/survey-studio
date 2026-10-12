@@ -28,13 +28,14 @@ export const TYPE_INFO: Record<QuestionType, TypeInfo> = {
   consent: { type: 'consent', label: 'Consent', hint: 'Agree to take part, or end the survey', group: 'Research', choices: true, answerable: true },
   constant_sum: { type: 'constant_sum', label: 'Constant sum', hint: 'Split a total (e.g. 100) across options', group: 'Research', choices: true, answerable: true },
   text_block: { type: 'text_block', label: 'Text', hint: 'Instructions, vignettes, headings', group: 'Research', choices: false, answerable: false },
+  video: { type: 'video', label: 'Video', hint: 'A video, or a magic window to look around in; records viewing', group: 'Research', choices: false, answerable: true },
 };
 
 export const TYPE_GROUPS: { name: TypeInfo['group']; types: QuestionType[] }[] = [
   { name: 'Choice', types: ['single_choice', 'multi_choice', 'dropdown', 'rank'] },
   { name: 'Scales', types: ['rating_scale', 'matrix', 'slider', 'nps'] },
   { name: 'Text and numbers', types: ['short_text', 'long_text', 'number', 'date'] },
-  { name: 'Research', types: ['consent', 'constant_sum', 'text_block'] },
+  { name: 'Research', types: ['consent', 'constant_sum', 'text_block', 'video'] },
 ];
 
 export interface ScalePreset {
@@ -116,6 +117,7 @@ const DEFAULT_TEXT = {
     npsMax: 'Extremely likely',
     textTitle: 'Instructions',
     textBody: 'Write instructions, a vignette or any other text respondents should read.',
+    videoTitle: 'Please watch the following video carefully.',
   },
   de: {
     question: 'Neue Frage',
@@ -133,6 +135,7 @@ const DEFAULT_TEXT = {
     npsMax: 'Sehr wahrscheinlich',
     textTitle: 'Hinweise',
     textBody: 'Schreiben Sie hier Hinweise, eine Fallvignette oder anderen Text, den die Teilnehmenden lesen sollen.',
+    videoTitle: 'Bitte sehen Sie sich das folgende Video aufmerksam an.',
   },
 } as const;
 
@@ -204,6 +207,9 @@ export function createQuestion(type: QuestionType, survey: Survey): Question {
       };
     case 'text_block':
       return { ...base, title: t.textTitle, description: t.textBody };
+    case 'video':
+      // Required: respondents continue once they've watched it to the end.
+      return { ...base, title: t.videoTitle, required: true, video: { src: '', view: 'wrap', span: 180, fov: 90, tilt: false } };
   }
 }
 

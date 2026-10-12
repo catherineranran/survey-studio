@@ -120,3 +120,32 @@ describe('summaries', () => {
     }
   });
 });
+
+describe('video questions', () => {
+  it('export seconds played, whether it ended, where people looked and problems', async () => {
+    const { createQuestion } = await import('./questionTypes');
+    const { blankSurvey } = await import('./templates');
+    const s = blankSurvey('v1');
+    const q = { ...createQuestion('video', s), variable: 'clip' };
+    s.blocks[0].questions = [q];
+    const cols = buildColumns(s, { values: 'codes', includePreview: false, includeTimings: false });
+    const names = cols.map((c) => c.name);
+    expect(names).toEqual(expect.arrayContaining(['clip_sec', 'clip_end', 'clip_look', 'clip_error']));
+    const r = {
+      id: 'r1',
+      surveyId: 'v1',
+      createdAt: '2026-10-12T10:00:00Z',
+      answers: { [q.id]: { sec: 88.4, end: true, look: [[0, 0], [12.5, -3], null] } },
+      otherText: {},
+      embedded: {},
+      meta: { status: 'complete' },
+    } as unknown as Parameters<(typeof cols)[number]['get']>[0];
+    const row = Object.fromEntries(cols.map((c) => [c.name, c.get(r)]));
+    expect(row.clip_sec).toBe(88.4);
+    expect(row.clip_end).toBe(1);
+    expect(JSON.parse(String(row.clip_look))).toEqual([[0, 0], [12.5, -3], null]);
+    expect(row.clip_error).toBeNull();
+    const csv = responsesToCSV(s, [r], { values: 'labels', includePreview: false, includeTimings: false, dialect: 'standard' });
+    expect(csv).toContain('Watched to the end');
+  });
+});

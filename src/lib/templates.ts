@@ -253,17 +253,22 @@ function experiment(id: string): Survey {
 }
 
 function videoExperiment(id: string): Survey {
-  const stimulus = (title: string, body: string) => block(title, [q('text_block', '', 'Please watch carefully', { description: body })]);
-  const ai = stimulus(
-    'AI-generated video',
-    '**[Add the AI-generated video here.]** Open this text in the Build tab and use the ▶ button to add a link to a video file, or to a YouTube, Vimeo or Google Drive video.',
-  );
+  // Add the videos in the Build tab: paste each video's link into its video question.
+  const stimulus = (title: string, variable: string) =>
+    block(title, [
+      q('video', variable, 'Please watch the following video carefully.', {
+        description: 'Drag the picture to look around. You can continue once the video has finished.',
+        required: true,
+        video: { src: '', view: 'wrap', span: 180, fov: 90, tilt: false },
+      }),
+    ]);
+  const ai = stimulus('AI-generated video', 'video_ai');
   const vignette = block('Vignette', [
     q('text_block', '', 'Please read carefully', {
       description: '**[Write the vignette here.]** A short written scenario that describes the same situation as the videos.',
     }),
   ]);
-  const captured = stimulus('Captured video', '**[Add the captured (real) video here.]** Use the ▶ button below the text to add the link.');
+  const captured = stimulus('Captured video', 'video_captured');
 
   const realism = q('rating_scale', 'realism', 'How realistic did the situation you just saw or read about seem to you?', {
     required: true,

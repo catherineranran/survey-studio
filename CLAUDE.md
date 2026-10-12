@@ -14,6 +14,7 @@ Static React + TypeScript app (Vite). No server code: storage is either the brow
 - `src/lib/backend/` has two implementations of the `Backend` interface (`local.ts`, `supabase.ts`). Any new data operation needs both, plus SQL in `supabase/schema.sql` if respondents call it.
 - Respondents never touch tables directly in Supabase: only `get_public_survey` and `submit_response` (security definer). Don't add anon policies.
 - `src/components/QuestionView.tsx` renders every question type for respondents, the preview and the builder canvas.
+- Video questions: `components/VideoPlayer.tsx` (flat or WebGL magic window; records `VideoAnswer` {sec, end, look, err}), `lib/video.ts` (links, `video.json` folders, AES-GCM parts with the key in `#k=`, shared download cache), `scripts/seal-video.mjs` makes folders. Required means watched to the end; any playback failure sets `err` so respondents are never stuck. Keys never go into data exports (`withoutVideoKeys`).
 - Adding a question type: `types.ts` (QuestionType), `questionTypes.ts` (TYPE_INFO, TYPE_GROUPS, createQuestion), `QuestionView.tsx`, `engine.ts` (validateAnswer, answerText, operatorsFor in LogicEditor), `export.ts` (questionColumns), `stats.ts` (summarize), `QuestionEditor.tsx` / `Inspector.tsx`.
 
 ## Conventions

@@ -9,6 +9,7 @@ It is a static web app. Run it on your laptop, host it free on GitHub Pages, and
 **Building**
 - 15 question types: multiple choice, checkboxes, dropdown, rank order, rating scale (numbered bubbles or stars), matrix / Likert table, slider, Net Promoter Score, short text, paragraph, number, date, consent, constant sum, and text blocks for instructions or vignettes
 - Images and videos in any text: a video file (.mp4, .webm), or a YouTube, Vimeo or Google Drive link
+- Video questions: an ordinary video, or a magic window into 140°, 180° or 360° footage that respondents look around in (drag, arrow keys, or moving the phone). They can be required to watch to the end, and the data records seconds played, whether it reached the end, and where people looked each second
 - Blocks and pages: all questions of a block on one page, or one per page
 - Likert presets in English and German (agreement, frequency, satisfaction, importance, likelihood, quality)
 - Option lists you can paste into: paste ten lines, get ten options. Enter adds a row, Backspace on an empty row removes it
@@ -104,6 +105,16 @@ GitHub Pages needs a **public** repository on the free plan. If you want to keep
 **Flow and randomizers.** The Flow tab shows the survey as a flowchart. Drag a block between two steps to put it there, or onto another block to randomize between the two: they become two branches of a randomizer, and each respondent gets one. Drag more blocks into a branch (they run in sequence) or into "New branch". Each branch has a name, which is what's saved in the randomizer's field (e.g. `condition` = `Vignette`), so later questions can depend on it: give a question display logic "condition is not Vignette" to skip it for that group, and use "Use this logic on other questions" to copy that to many questions at once. "Keep group sizes even" gives each new respondent the branch with the fewest submitted responses so far. The *Three-condition video experiment* template is a ready-made example.
 
 **Preview.** Preview opens in its own window, so you can keep it next to the builder. Pick where to start (or use "Preview from this block" in a block's menu) and which branch to get. Starting at a block shows it as if the respondent had just arrived, without earlier answers. "Skip required questions" lets you click through; answers you do give are still checked. When you edit the survey, the preview offers to restart with the changes.
+
+**Video questions (magic window).** Add a *Video* question (under Research) and paste the video's link. *Shown as: Magic window* lets respondents look around in wrap-around footage: set how far the picture reaches around them (140°, 180° for VR180, 360°) and how much is visible at once. With *Required* on, Next appears once the video has ended. If a video can't play on someone's device, they can continue and the reason is saved (`<name>_error`), so nobody gets stuck. Exports get `<name>_sec` (seconds played), `<name>_end` (watched to the end) and, for magic windows, `<name>_look`: one `[yaw, pitch]` per second of the video, in degrees from straight ahead (yaw > 0 right, pitch > 0 up). Mention the viewing data in your consent text.
+
+**Where to put videos.** Any https link to an .mp4 or .webm file works; for a magic window the file must come from your own site or one that allows it (CORS). To keep stimuli private on a public website, encrypt them into a *video folder*:
+
+```bash
+node scripts/seal-video.mjs clip.mp4 out/clip --view wrap --span 180 --fov 90 --title "Captured, bystander"
+```
+
+Upload the folder and use `https://…/clip/video.json#k=<key>` (the key is printed) as the video link. Participants' browsers open it without a password; someone browsing the website only finds sealed files. The key is part of the survey, so data exports and the survey definition in Results leave it out; the survey backup on the dashboard keeps it. Encrypted videos load completely before they play (they start loading when the participant begins the survey), so keep them reasonably small: about 2048 × 2048 px and H.264 suits most phones.
 
 **Images and videos.** In a question or text block, use the ▶ button below the text, or type `![description](https://…)`. Video files play in the browser's own player. YouTube videos play from youtube-nocookie.com and Vimeo with "do not track", but they still load from those sites; for strict data protection, put the video file on your own web space.
 
