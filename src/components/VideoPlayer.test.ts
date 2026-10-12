@@ -25,6 +25,27 @@ describe('magic window view', () => {
     expect(deg(yaw)).toBeLessThan(11); // 70° − 59.5°
   });
 
+  it('can keep respondents to the central part of the picture, to match another condition', () => {
+    // A 180° picture limited to its central 140° turns exactly as far as a 140° picture.
+    const limited = geometry(180, 90, 1, 1.6, 140);
+    const narrow = geometry(140, 90, 1, 1.6);
+    for (const [y, p] of [
+      [5, 0],
+      [-5, 0],
+      [0, 5],
+      [0, -5],
+      [5, 5],
+    ]) {
+      const a = clampView(limited, y, p);
+      const b = clampView(narrow, y, p);
+      expect(deg(a[0])).toBeCloseTo(deg(b[0]), 6);
+      expect(deg(a[1])).toBeCloseTo(deg(b[1]), 6);
+    }
+    expect(deg(clampView(limited, 5, 0)[0])).toBeCloseTo(25, 4); // 70° − 45°
+    // The picture itself still spans 180°: only how far people can turn changes.
+    expect(deg(limited.hSpan)).toBeCloseTo(180, 6);
+  });
+
   it('goes all the way round a 360° picture', () => {
     const g = geometry(360, 90, 2, 16 / 10);
     const [yaw] = clampView(g, Math.PI * 1.5, 0);

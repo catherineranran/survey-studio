@@ -189,7 +189,7 @@ function VideoPlaceholder({ q }: { q: Question }) {
   return (
     <div className="vp-placeholder">
       <Icon name="play" size={26} />
-      <span className="vp-placeholder-title">{!v?.src?.trim() ? 'No video yet' : !link ? 'This video link doesn’t work' : v.view === 'wrap' ? `Magic window: ${v.span}° picture, ${v.fov}° visible` : 'Video'}</span>
+      <span className="vp-placeholder-title">{!v?.src?.trim() ? 'No video yet' : !link ? 'This video link doesn’t work' : v.view === 'wrap' ? `Magic window: ${v.span}° picture, ${v.fov}° visible${v.reach && v.reach < v.span ? `, look around within ${v.reach}°` : ''}` : 'Video'}</span>
       {name && <span className="vp-placeholder-src">{name}</span>}
     </div>
   );

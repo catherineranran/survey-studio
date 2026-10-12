@@ -59,23 +59,33 @@ const STALL_MS = 30000;
 const round1 = (x: number) => Math.round(x * 10) / 10;
 
 export interface Geometry {
+  /** The picture's angular width and height. */
   hSpan: number;
   vSpan: number;
+  /** The picture goes all the way round. */
   wrap: boolean;
+  /** The part of the picture respondents can look around in (centred), and whether they can turn all the way. */
+  limH: number;
+  limV: number;
+  turn: boolean;
   tanH: number;
   tanV: number;
   halfV: number;
 }
 
 /** The view for a canvas of the given aspect ratio. Angles in degrees in, radians out. */
-export function geometry(span: number, fov: number, frameAspect: number, aspect: number): Geometry {
+export function geometry(span: number, fov: number, frameAspect: number, aspect: number, reach?: number): Geometry {
   const wrap = span >= 360;
   const hSpan = Math.min(span, 360) * D2R;
   const vSpan = Math.min(hSpan / Math.max(frameAspect, 1e-3), Math.PI);
-  const fovH = Math.max(20, Math.min(fov, wrap ? 170 : Math.min(170, span))) * D2R;
+  const r = reach && reach > 0 ? Math.min(reach, 360) * D2R : hSpan;
+  const limH = Math.min(hSpan, r);
+  const limV = Math.min(vSpan, (vSpan * limH) / hSpan);
+  const turn = wrap && limH >= 2 * Math.PI - 1e-9;
+  const fovH = Math.max(20, Math.min(fov, turn ? 170 : Math.min(170, limH / D2R))) * D2R;
   const tanH = Math.tan(fovH / 2);
   const tanV = tanH / aspect;
-  return { hSpan, vSpan, wrap, tanH, tanV, halfV: Math.atan(tanV) };
+  return { hSpan, vSpan, wrap, limH, limV, turn, tanH, tanV, halfV: Math.atan(tanV) };
 }
 
 /** Longitude / latitude of points along the edge of the view, looking straight ahead at the given pitch. */
@@ -105,12 +115,12 @@ function edgeRays(g: Geometry, pitch: number): [number, number][] {
 
 /** Keeps the view on the picture: respondents look around only as far as the picture goes, corners included. */
 export function clampView(g: Geometry, yaw: number, pitch: number): [number, number] {
-  const lonLimit = g.wrap ? Infinity : g.hSpan / 2 + 1e-6;
-  const fits = (p: number) => edgeRays(g, p).every(([lo, la]) => Math.abs(la) <= g.vSpan / 2 + 1e-6 && Math.abs(lo) <= lonLimit);
+  const lonLimit = g.turn ? Infinity : g.limH / 2 + 1e-6;
+  const fits = (p: number) => edgeRays(g, p).every(([lo, la]) => Math.abs(la) <= g.limV / 2 + 1e-6 && Math.abs(lo) <= lonLimit);
   let pm = 0;
   if (fits(0)) {
     let lo = 0;
-    let hi = g.vSpan / 2;
+    let hi = g.limV / 2;
     for (let i = 0; i < 18; i++) {
       const mid = (lo + hi) / 2;
       if (fits(mid)) lo = mid;
@@ -119,9 +129,9 @@ export function clampView(g: Geometry, yaw: number, pitch: number): [number, num
     pm = lo;
   }
   const p = Math.max(-pm, Math.min(pm, pitch));
-  if (g.wrap) return [wrapAngle(yaw), p];
+  if (g.turn) return [wrapAngle(yaw), p];
   const maxLon = Math.max(...edgeRays(g, p).map(([lo]) => Math.abs(lo)));
-  const ym = Math.max(0, g.hSpan / 2 - maxLon);
+  const ym = Math.max(0, g.limH / 2 - maxLon);
   return [Math.max(-ym, Math.min(ym, yaw)), p];
 }
 
@@ -464,7 +474,7 @@ export function VideoPlayer({ settings, lang, value, onChange, labelledBy }: Vid
       }
       const s = cfg.current;
       const frameAspect = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 1;
-      const g = geometry(s.span, s.fov, frameAspect, cw / ch);
+      const g = geometry(s.span, s.fov, frameAspect, cw / ch, s.reach);
       const v = view.current;
       const [yaw, pitch] = clampView(g, v.yaw + v.tiltYaw, v.pitch + v.tiltPitch);
       v.yaw = yaw - v.tiltYaw; // dragging past the edge doesn't build up
@@ -600,7 +610,7 @@ export function VideoPlayer({ settings, lang, value, onChange, labelledBy }: Vid
     if (!d) return;
     const c = e.currentTarget;
     const s = cfg.current;
-    const g = geometry(s.span, s.fov, 1, c.clientWidth / Math.max(1, c.clientHeight));
+    const g = geometry(s.span, s.fov, 1, c.clientWidth / Math.max(1, c.clientHeight), s.reach);
     const k = (2 * g.halfV) / Math.max(1, c.clientHeight); // the picture follows the pointer
     view.current.yaw += (e.clientX - d.x) * k;
     view.current.pitch += (e.clientY - d.y) * k;

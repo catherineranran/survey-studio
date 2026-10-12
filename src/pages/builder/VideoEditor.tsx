@@ -93,6 +93,20 @@ export function VideoEditor({ q, change }: { q: Question; change: QMutate }) {
               <NumberInput id={`${id}-fov`} value={v.fov} min={20} max={170} onChange={(n) => n !== null && set({ fov: Math.max(20, Math.min(170, n)) }, 'fov')} />
             </Field>
           </div>
+          <Field
+            label="Look-around area (°, optional)"
+            htmlFor={`${id}-reach`}
+            hint="Keeps respondents to the central part of the picture, e.g. 140 so a 180° video turns exactly as far as a 140° one. Empty: the whole picture."
+          >
+            <NumberInput
+              id={`${id}-reach`}
+              value={v.reach ?? null}
+              min={30}
+              max={360}
+              placeholder={String(v.span)}
+              onChange={(n) => set({ reach: n === null ? undefined : Math.max(30, Math.min(360, n)) }, 'reach')}
+            />
+          </Field>
           <Toggle
             label="Phones and tablets: move the device to look around"
             hint="As well as dragging. iPhones and iPads ask respondents for permission first."

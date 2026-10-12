@@ -110,6 +110,12 @@ export interface VideoSettings {
   span: number;
   /** wrap: how much of it is visible at once, across, in degrees. */
   fov: number;
+  /**
+   * wrap: respondents look around only within the central part of the picture this many
+   * degrees across (and proportionally high), e.g. 140 to match a 140° video in another
+   * condition. Unset: the whole picture.
+   */
+  reach?: number;
   /** wrap: on phones and tablets, moving the device looks around too. */
   tilt?: boolean;
 }
