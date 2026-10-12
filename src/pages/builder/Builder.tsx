@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { QuestionView } from '../../components/QuestionView';
 import { Button, Icon, IconButton, Menu, useConfirm, useMediaQuery } from '../../components/ui';
+import { canMoveBlock, describeTarget, insertBlockAfter, moveBlock as moveBlockInFlow, removeBlock } from '../../lib/flow';
+import { uid } from '../../lib/ids';
 import { questionLabel } from '../../lib/lint';
 import { TYPE_INFO, cloneQuestion, createQuestion } from '../../lib/questionTypes';
 import { newBlock } from '../../lib/templates';
@@ -22,13 +24,23 @@ function locate(s: Survey, qid: string): { block: Block; index: number } | null 
   return null;
 }
 
-export function Builder({ survey, update }: { survey: Survey; update: Updater<Survey> }) {
-  const [sel, setSel] = useState<Selection>(null);
+export function Builder({ survey, update, onPreview }: { survey: Survey; update: Updater<Survey>; onPreview?: (blockId: string) => void }) {
+  // The Flow tab links here with ?block=<id> to open a block.
+  const [sel, setSel] = useState<Selection>(() => {
+    const id = new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('block');
+    return id ? { kind: 'block', id } : null;
+  });
   const [adding, setAdding] = useState<{ blockId: string; afterId?: string } | null>(null);
   const [drag, setDrag] = useState<{ id: string; over?: string; overBlock?: string } | null>(null);
   const wide = useMediaQuery('(min-width: 1100px)');
   const outline = useMediaQuery('(min-width: 1400px)');
   const confirm = useConfirm();
+
+  useEffect(() => {
+    if (sel?.kind === 'block') requestAnimationFrame(() => document.getElementById(`block-${sel.id}`)?.scrollIntoView({ block: 'start' }));
+    // Only when arriving with a block to open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Drop the selection when its target disappears (undo, delete).
   useEffect(() => {
@@ -153,12 +165,9 @@ export function Builder({ survey, update }: { survey: Survey; update: Updater<Su
     });
   };
 
-  const addBlock = (afterIndex?: number) => {
+  const addBlock = (afterBlockId?: string) => {
     const b = newBlock(survey);
-    update((s) => {
-      if (afterIndex === undefined) s.blocks.push(b);
-      else s.blocks.splice(afterIndex + 1, 0, b);
-    });
+    update((s) => insertBlockAfter(s, b, afterBlockId ?? null));
     setSel({ kind: 'block', id: b.id });
     requestAnimationFrame(() => document.getElementById(`block-${b.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
@@ -172,11 +181,7 @@ export function Builder({ survey, update }: { survey: Survey; update: Updater<Su
       danger: true,
     });
     if (!ok) return;
-    update((s) => {
-      s.blocks = s.blocks.filter((x) => x.id !== b.id);
-      for (const r of s.randomizers) r.blockIds = r.blockIds.filter((id) => id !== b.id);
-      for (const x of s.blocks) for (const br of x.branches) if (br.target === b.id) br.target = 'end';
-    });
+    update((s) => removeBlock(s, b.id));
   };
 
   const duplicateBlock = (b: Block) => {
@@ -210,18 +215,11 @@ export function Builder({ survey, update }: { survey: Survey; update: Updater<Su
         if (typeof cd.value === 'string' && ids.has(cd.value)) cd.value = ids.get(cd.value);
       });
     copy.questions.forEach((q) => remap(q.displayLogic));
-    update((s) => {
-      const i = s.blocks.findIndex((x) => x.id === b.id);
-      s.blocks.splice(i + 1, 0, copy);
-    });
+    update((s) => insertBlockAfter(s, copy, b.id));
   };
 
-  const moveBlock = (i: number, dir: -1 | 1) =>
-    update((s) => {
-      const j = i + dir;
-      if (j < 0 || j >= s.blocks.length) return;
-      [s.blocks[i], s.blocks[j]] = [s.blocks[j], s.blocks[i]];
-    });
+  // Blocks move past whole steps; inside a randomizer branch they move within the branch.
+  const moveBlock = (blockId: string, dir: -1 | 1) => update((s) => moveBlockInFlow(s, blockId, dir));
 
   const selectedQ = sel?.kind === 'question' ? locate(survey, sel.id) : null;
   const selectedBlock = sel?.kind === 'block' ? survey.blocks.find((b) => b.id === sel.id) : null;
@@ -235,6 +233,13 @@ export function Builder({ survey, update }: { survey: Survey; update: Updater<Su
       onDuplicate={() => duplicateQ(sel!.id)}
       onDelete={() => deleteQ(sel!.id)}
       onMoveToBlock={(bid) => moveToBlock(sel!.id, bid)}
+      onApplyLogic={(ids, logic) =>
+        update((s) => {
+          for (const b of s.blocks)
+            for (const x of b.questions)
+              if (ids.includes(x.id)) x.displayLogic = { match: logic.match, conditions: logic.conditions.map((c) => ({ ...c, id: uid('cd') })) };
+        })
+      }
     />
   ) : selectedBlock ? (
     <BlockInspector survey={survey} block={selectedBlock} update={update} />
@@ -244,7 +249,7 @@ export function Builder({ survey, update }: { survey: Survey; update: Updater<Su
 
   const randomizerOf = useMemo(() => {
     const m = new Map<string, string>();
-    for (const r of survey.randomizers) for (const id of r.blockIds) m.set(id, r.variable);
+    for (const r of survey.randomizers) for (const a of r.arms) for (const id of a.blockIds) m.set(id, `${r.variable}: ${a.label}`);
     return m;
   }, [survey.randomizers]);
 
@@ -323,8 +328,8 @@ export function Builder({ survey, update }: { survey: Survey; update: Updater<Su
                     </span>
                   ))}
                   {rz && (
-                    <span className="badge badge-logic">
-                      <Icon name="shuffle" size={13} /> Randomizer {rz}
+                    <span className="badge badge-logic" title="This block is one branch of a randomizer. Arrange it in the Flow tab.">
+                      <Icon name="shuffle" size={13} /> {rz}
                     </span>
                   )}
                   {b.displayLogic?.conditions.length ? (
@@ -337,9 +342,10 @@ export function Builder({ survey, update }: { survey: Survey; update: Updater<Su
                   label={`Block actions for ${b.title}`}
                   items={[
                     { label: 'Block settings and logic', icon: 'sliders', onSelect: () => setSel({ kind: 'block', id: b.id }) },
-                    { label: 'Add a block after this one', icon: 'plus', onSelect: () => addBlock(bi) },
-                    { label: 'Move block up', icon: 'up', onSelect: () => moveBlock(bi, -1), disabled: bi === 0 },
-                    { label: 'Move block down', icon: 'down', onSelect: () => moveBlock(bi, 1), disabled: bi === survey.blocks.length - 1 },
+                    onPreview && { label: 'Preview from this block', icon: 'eye', onSelect: () => onPreview(b.id) },
+                    { label: 'Add a block after this one', icon: 'plus', onSelect: () => addBlock(b.id) },
+                    { label: 'Move block up', icon: 'up', onSelect: () => moveBlock(b.id, -1), disabled: !canMoveBlock(survey, b.id, -1) },
+                    { label: 'Move block down', icon: 'down', onSelect: () => moveBlock(b.id, 1), disabled: !canMoveBlock(survey, b.id, 1) },
                     { label: 'Duplicate block', icon: 'copy', onSelect: () => duplicateBlock(b) },
                     { label: 'Delete block', icon: 'trash', danger: true, onSelect: () => deleteBlock(b), disabled: survey.blocks.length === 1 },
                   ]}
@@ -450,7 +456,7 @@ export function Builder({ survey, update }: { survey: Survey; update: Updater<Su
                     {b.branches.map((br) => (
                       <p key={br.id}>
                         If {describeLogic(br.logic, survey)}, go to{' '}
-                        <strong>{br.target === 'end' ? `the end (${br.endTag || 'complete'})` : (survey.blocks.find((x) => x.id === br.target)?.title ?? 'a missing block')}</strong>
+                        <strong>{br.target === 'end' ? `the end (${br.endTag || 'complete'})` : describeTarget(survey, b.id, br.target)}</strong>
                       </p>
                     ))}
                   </div>

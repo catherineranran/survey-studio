@@ -10,6 +10,8 @@ import type {
   Lang,
   Logic,
   Question,
+  Randomizer,
+  RandomizerArm,
   Survey,
 } from './types';
 
@@ -49,6 +51,10 @@ export interface SurveyIndex {
   blocks: Map<string, Block>;
   questionBlock: Map<string, Block>;
   byVariable: Map<string, Question>;
+  /** Block id -> id of the randomizer it belongs to. */
+  randomizerOf: Map<string, string>;
+  /** Fields that record randomizer branches (one name, or several joined with "|"). */
+  randomizerFields: Set<string>;
 }
 
 export function indexSurvey(survey: Survey): SurveyIndex {
@@ -67,7 +73,14 @@ export function indexSurvey(survey: Survey): SurveyIndex {
       }
     }
   }
-  return { questions, blocks, questionBlock, byVariable };
+  const randomizerOf = new Map<string, string>();
+  const randomizerFields = new Set<string>();
+  for (const r of survey.randomizers ?? []) {
+    randomizerFields.add(r.variable);
+    // A block listed twice belongs to the first randomizer, as in makePlan.
+    for (const a of r.arms ?? []) for (const id of a.blockIds) if (!randomizerOf.has(id)) randomizerOf.set(id, r.id);
+  }
+  return { questions, blocks, questionBlock, byVariable, randomizerOf, randomizerFields };
 }
 
 /** All questions in survey order. */
@@ -84,55 +97,79 @@ export interface Plan {
   questionOrder: Record<string, string[]>;
   choiceOrder: Record<string, string[]>;
   rowOrder: Record<string, string[]>;
-  /** Randomizer variable -> presented block title(s), joined with "|". */
+  /** Randomizer variable -> label(s) of the branch(es) given, joined with "|". */
   assignments: Record<string, string>;
+  /** Randomizer id -> ids of the branches given, in the order shown. */
+  armChoices?: Record<string, string[]>;
+  /** Randomizer id -> position in blockOrder where it starts (where the next step starts, for an empty branch). */
+  randomizerAt?: Record<string, number>;
 }
 
 /** Completed responses per randomizer value, used for balanced assignment. */
 export type AssignmentCounts = Record<string, Record<string, number>>;
 
+/** Randomizer id -> branch ids to give (preview: "show me the vignette branch"). */
+export type ForcedArms = Record<string, string[]>;
+
 export function blockLabel(b: Block): string {
   return b.title.trim() || b.id;
 }
 
-export function makePlan(survey: Survey, seed: number, counts: AssignmentCounts = {}): Plan {
+/** Branches of a randomizer, keeping only blocks that exist and aren't claimed by an earlier branch. */
+export function liveArms(survey: Survey, r: Randomizer, claimed = new Set<string>()): RandomizerArm[] {
+  const exists = new Set(survey.blocks.map((b) => b.id));
+  return (r.arms ?? []).map((a) => {
+    const blockIds = a.blockIds.filter((id) => exists.has(id) && !claimed.has(id));
+    blockIds.forEach((id) => claimed.add(id));
+    return { ...a, blockIds };
+  });
+}
+
+export function makePlan(survey: Survey, seed: number, counts: AssignmentCounts = {}, forced: ForcedArms = {}): Plan {
   const rand = mulberry32(seed);
   const assignments: Record<string, string> = {};
-  const chosen = new Map<string, string[]>(); // randomizer id -> presented block ids, in order
+  const armChoices: Record<string, string[]> = {};
+  const chosen = new Map<string, string[]>(); // randomizer id -> block ids to show, in order
   const owner = new Map<string, string>(); // block id -> randomizer id
-  const blockById = new Map(survey.blocks.map((b) => [b.id, b]));
+  const claimed = new Set<string>();
 
   for (const r of survey.randomizers) {
-    const ids = r.blockIds.filter((id) => blockById.has(id) && !owner.has(id));
-    if (!ids.length) continue;
-    ids.forEach((id) => owner.set(id, r.id));
-    const n = Math.max(1, Math.min(Math.floor(r.present) || 1, ids.length));
-    let picked: string[];
-    if (r.balance) {
-      const usage = new Map<string, number>(ids.map((id) => [blockLabel(blockById.get(id)!), 0]));
+    const arms = liveArms(survey, r, claimed);
+    arms.forEach((a) => a.blockIds.forEach((id) => owner.set(id, r.id)));
+    if (!arms.length) continue;
+    const n = Math.max(1, Math.min(Math.floor(r.present) || 1, arms.length));
+    const wanted = (forced[r.id] ?? []).map((id) => arms.find((a) => a.id === id)).filter((a): a is RandomizerArm => !!a);
+    let picked: RandomizerArm[];
+    if (wanted.length) {
+      const rest = shuffle(arms.filter((a) => !wanted.includes(a)), rand);
+      picked = [...wanted, ...rest].slice(0, n);
+    } else if (r.balance) {
+      const usage = new Map<string, number>(arms.map((a) => [a.label, 0]));
       for (const [value, count] of Object.entries(counts[r.variable] ?? {})) {
         for (const label of value.split('|')) if (usage.has(label)) usage.set(label, usage.get(label)! + count);
       }
       // Least-used first; ties broken randomly.
-      picked = shuffle(ids, rand)
-        .sort((a, b) => usage.get(blockLabel(blockById.get(a)!))! - usage.get(blockLabel(blockById.get(b)!))!)
+      picked = shuffle(arms, rand)
+        .sort((a, b) => usage.get(a.label)! - usage.get(b.label)!)
         .slice(0, n);
       picked = shuffle(picked, rand);
     } else {
-      picked = shuffle(ids, rand).slice(0, n);
+      picked = shuffle(arms, rand).slice(0, n);
     }
-    chosen.set(r.id, picked);
-    assignments[r.variable] = picked.map((id) => blockLabel(blockById.get(id)!)).join('|');
+    armChoices[r.id] = picked.map((a) => a.id);
+    chosen.set(r.id, picked.flatMap((a) => a.blockIds));
+    assignments[r.variable] = picked.map((a) => a.label).join('|');
   }
 
+  // A randomizer runs where its first block sits in the survey.
   const blockOrder: string[] = [];
-  const emitted = new Set<string>();
+  const randomizerAt: Record<string, number> = {};
   for (const b of survey.blocks) {
     const rid = owner.get(b.id);
     if (!rid) {
       blockOrder.push(b.id);
-    } else if (!emitted.has(rid)) {
-      emitted.add(rid);
+    } else if (!(rid in randomizerAt)) {
+      randomizerAt[rid] = blockOrder.length;
       blockOrder.push(...(chosen.get(rid) ?? []));
     }
   }
@@ -168,7 +205,7 @@ export function makePlan(survey: Survey, seed: number, counts: AssignmentCounts 
     }
   }
 
-  return { seed, blockOrder, questionOrder, choiceOrder, rowOrder, assignments };
+  return { seed, blockOrder, questionOrder, choiceOrder, rowOrder, assignments, armChoices, randomizerAt };
 }
 
 /** Orders a list by the plan, appending anything the plan doesn't know about. */
@@ -198,6 +235,8 @@ export interface Ctx {
   embedded: Record<string, string>;
   /** Survey language, used to read numbers typed with local separators. */
   lang?: Lang;
+  /** Blocks shown whatever their display logic says (preview started at that block). */
+  forceVisible?: readonly string[];
 }
 
 export function makeCtx(survey: Survey, answers: Answers = {}, embedded: Record<string, string> = {}, otherText: Record<string, string> = {}): Ctx {
@@ -247,8 +286,14 @@ function numericValue(q: Question, v: unknown, lang?: Lang): number | null {
 
 export function evalCondition(c: Condition, ctx: Ctx): boolean {
   if (c.source.startsWith('param:')) {
-    const raw = String(ctx.embedded[c.source.slice(6)] ?? '');
-    return compare(c, raw, raw.trim() !== '', toNumber(raw, ctx.lang), ctx.lang);
+    const name = c.source.slice(6);
+    const raw = String(ctx.embedded[name] ?? '');
+    // Randomizer fields hold a branch name, or several joined with "|" when respondents get
+    // more than one. There "is Video" means "got the Video branch", whatever else they got.
+    let cond = c;
+    if (ctx.index.randomizerFields?.has(name) && (c.operator === 'is' || c.operator === 'is_not')) cond = { ...c, operator: c.operator === 'is' ? 'includes' : 'excludes' };
+    const value = cond.operator === 'includes' || cond.operator === 'excludes' ? (raw ? raw.split('|') : []) : raw;
+    return compare(cond, value, raw.trim() !== '', toNumber(raw, ctx.lang), ctx.lang);
   }
   const q = ctx.index.questions.get(c.source);
   if (!q) return false;
@@ -305,7 +350,7 @@ export function evalLogic(logic: Logic | null | undefined, ctx: Ctx): boolean {
 }
 
 export const isQuestionVisible = (q: Question, ctx: Ctx) => evalLogic(q.displayLogic, ctx);
-export const isBlockVisible = (b: Block, ctx: Ctx) => evalLogic(b.displayLogic, ctx);
+export const isBlockVisible = (b: Block, ctx: Ctx) => !!ctx.forceVisible?.includes(b.id) || evalLogic(b.displayLogic, ctx);
 
 /* ------------------------------------------------------------------- pages */
 
@@ -389,6 +434,16 @@ export function effectiveCtx(plan: Plan, ctx: Ctx, history: Position[]): Ctx {
   return { ...ctx, answers: effectiveAnswers(plan, ctx, history) };
 }
 
+/** Preview: the first page of a given block, as if the respondent had just arrived there. */
+export function stepAtBlock(plan: Plan, ctx: Ctx, blockId: string): Step | null {
+  const bi = plan.blockOrder.indexOf(blockId);
+  const block = ctx.index.blocks.get(blockId);
+  if (bi < 0 || !block) return null;
+  const pages = pagesForBlock(block, plan);
+  const pi = pages.findIndex((p) => visibleQuestions(p, ctx).length > 0);
+  return { kind: 'page', pos: { block: bi, page: Math.max(0, pi) } };
+}
+
 export function firstStep(plan: Plan, ctx: Ctx): Step {
   return findFrom(plan, ctx, 0) ?? { kind: 'end', status: 'complete' };
 }
@@ -418,7 +473,19 @@ export function nextStep(plan: Plan, ctx: Ctx, pos: Position): Step {
     if (!evalLogic(br.logic, ctx)) continue;
     if (br.target === 'end')
       return { kind: 'end', status: br.endTag?.trim() || 'complete', message: br.endMessage || undefined, redirect: br.endRedirect?.trim() || undefined };
-    const idx = plan.blockOrder.indexOf(br.target);
+    let idx = plan.blockOrder.indexOf(br.target);
+    const rid = ctx.index.randomizerOf.get(br.target);
+    if (rid !== undefined && rid !== ctx.index.randomizerOf.get(block.id)) {
+      // Jumping into a randomizer from outside goes to its start: everyone continues with
+      // the branch they got, from its beginning (an empty branch: straight past it).
+      const at = plan.randomizerAt?.[rid];
+      if (at !== undefined) idx = at;
+      else {
+        // Plans saved before randomizerAt existed: the first block shown from that randomizer.
+        const shown = plan.blockOrder.flatMap((id, i) => (ctx.index.randomizerOf.get(id) === rid ? [i] : []));
+        if (shown.length) idx = shown[0];
+      }
+    }
     if (idx > pos.block) return findFrom(plan, ctx, idx) ?? { kind: 'end', status: 'complete' };
   }
 
@@ -441,11 +508,18 @@ export function remainingPages(plan: Plan, ctx: Ctx, pos: Position): number {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const URL_RE = /^https?:\/\/[^\s.]+\.\S+$/i;
 
-export function validateAnswer(q: Question, value: unknown, other: string | undefined, lang: Lang): string | null {
+export function validateAnswer(
+  q: Question,
+  value: unknown,
+  other: string | undefined,
+  lang: Lang,
+  opts: { skipRequired?: boolean } = {},
+): string | null {
   const v = q.validation ?? {};
   const custom = v.message?.trim();
-  // Consent must always be given or declined explicitly.
-  const req = q.required || q.type === 'consent';
+  // Consent must always be given or declined explicitly. In a preview the builder can
+  // skip required questions; answers that are given are still checked.
+  const req = !opts.skipRequired && (q.required || q.type === 'consent');
   switch (q.type) {
     case 'text_block':
       return null;

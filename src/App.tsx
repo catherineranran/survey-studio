@@ -5,6 +5,7 @@ import { BackendContext } from './lib/backend/context';
 import { useHashPath } from './lib/router';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
+import { PreviewWindow } from './pages/PreviewWindow';
 import { Respond } from './pages/Respond';
 import { Workspace } from './pages/Workspace';
 
@@ -40,6 +41,16 @@ function Admin() {
   if (fatal) return <p className="fatal">Survey Studio couldn’t start: {fatal}</p>;
   if (!backend || user === undefined) return <Spinner label="Starting Survey Studio" />;
   if (backend.needsAuth && !user) return <Login backend={backend} />;
+
+  // The preview opens in its own window, without the app's header.
+  if (path[0] === 's' && path[1] && path[2] === 'preview')
+    return (
+      <BackendContext.Provider value={backend}>
+        <ErrorBoundary label="The preview couldn’t be shown">
+          <PreviewWindow key={path[1]} surveyId={path[1]} />
+        </ErrorBoundary>
+      </BackendContext.Provider>
+    );
 
   return (
     <BackendContext.Provider value={backend}>

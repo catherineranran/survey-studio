@@ -251,6 +251,16 @@ describe('validation', () => {
     expect(validateAnswer(code, 'ab123', undefined, 'en')).toBe('Use two letters and three digits.');
     expect(validateAnswer(code, 'AB123', undefined, 'en')).toBeNull();
   });
+
+  it('lets a preview skip required questions but still checks answers that are given', () => {
+    const skip = { skipRequired: true };
+    const email = make('short_text', { required: true, validation: { format: 'email' } });
+    expect(validateAnswer(email, '', undefined, 'en', skip)).toBeNull();
+    expect(validateAnswer(email, 'nope', undefined, 'en', skip)).toMatch(/email/);
+    const mx = make('matrix', { required: true });
+    expect(validateAnswer(mx, { [mx.rows![0].id]: mx.columns![0].id }, undefined, 'en', skip)).toBeNull();
+    expect(validateAnswer(make('consent'), undefined, undefined, 'en', skip)).toBeNull();
+  });
 });
 
 describe('piping', () => {

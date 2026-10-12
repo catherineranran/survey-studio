@@ -2,12 +2,14 @@ import { Button, IconButton, NumberInput } from '../../components/ui';
 import { uid } from '../../lib/ids';
 import { needsValue, questionLabel } from '../../lib/lint';
 import { scalePoints } from '../../lib/questionTypes';
-import type { Condition, Logic, Operator, Question, Survey } from '../../lib/types';
+import type { Condition, Logic, Operator, Question, Randomizer, Survey } from '../../lib/types';
 
 export interface Source {
   value: string;
   label: string;
   q?: Question;
+  /** Set for randomizer fields: conditions pick one of its branches. */
+  randomizer?: Randomizer;
 }
 
 /** Things a condition can look at: earlier questions, URL parameters and randomizer assignments. */
@@ -23,7 +25,7 @@ export function logicSources(survey: Survey, opts: { beforeQuestion?: string; up
     if (opts.uptoBlock && b.id === opts.uptoBlock) break;
   }
   for (const p of survey.urlParams) out.push({ value: `param:${p.name}`, label: `${p.name} (URL parameter)` });
-  for (const r of survey.randomizers) out.push({ value: `param:${r.variable}`, label: `${r.variable} (randomizer)` });
+  for (const r of survey.randomizers) out.push({ value: `param:${r.variable}`, label: `${r.variable} (randomizer)`, randomizer: r });
   return out;
 }
 
@@ -45,7 +47,8 @@ const OP_LABEL: Record<Operator, string> = {
   not_contains: 'does not contain',
 };
 
-export function operatorsFor(q?: Question): Operator[] {
+export function operatorsFor(q?: Question, randomizer?: Randomizer): Operator[] {
+  if (randomizer) return randomizer.present > 1 ? ['includes', 'excludes'] : ['is', 'is_not'];
   if (!q) return ['equals_text', 'contains', 'not_contains', 'answered', 'not_answered', 'eq', 'gt', 'lt'];
   switch (q.type) {
     case 'single_choice':
@@ -144,8 +147,12 @@ export function LogicEditor({
 }
 
 function freshCondition(src: Source): Condition {
-  const ops = operatorsFor(src.q);
+  const ops = operatorsFor(src.q, src.randomizer);
   const c: Condition = { id: uid('cd'), source: src.value, operator: ops[0] };
+  if (src.randomizer) {
+    c.value = src.randomizer.arms[0]?.label ?? '';
+    return c;
+  }
   const q = src.q;
   if (q?.type === 'matrix') {
     c.rowId = q.rows?.[0]?.id;
@@ -171,7 +178,9 @@ function ConditionRow({
 }) {
   const src = sources.find((s) => s.value === c.source);
   const q = src?.q;
-  const ops = operatorsFor(q);
+  const ops = operatorsFor(q, src?.randomizer);
+  // Older conditions on a randomizer may use text operators; keep showing them.
+  if (!ops.includes(c.operator)) ops.push(c.operator);
   const missing = !src;
   return (
     <div className={`cond ${missing ? 'is-broken' : ''}`}>
@@ -220,14 +229,27 @@ function ConditionRow({
             </option>
           ))}
         </select>
-        {needsValue(c.operator) && <ValueInput c={c} q={q} onChange={onChange} survey={survey} />}
+        {needsValue(c.operator) && <ValueInput c={c} q={q} randomizer={src?.randomizer} onChange={onChange} survey={survey} />}
       </div>
       <IconButton icon="x" size="sm" label="Remove condition" onClick={onRemove} />
     </div>
   );
 }
 
-function ValueInput({ c, q, onChange }: { c: Condition; q?: Question; onChange: (c: Condition) => void; survey: Survey }) {
+function ValueInput({ c, q, randomizer, onChange }: { c: Condition; q?: Question; randomizer?: Randomizer; onChange: (c: Condition) => void; survey: Survey }) {
+  if (randomizer && ['is', 'is_not', 'includes', 'excludes'].includes(c.operator)) {
+    const known = randomizer.arms.some((a) => a.label === c.value);
+    return (
+      <select className="input input-sm cond-value" value={String(c.value ?? '')} aria-label="Branch" onChange={(e) => onChange({ ...c, value: e.target.value })}>
+        {!known && <option value={String(c.value ?? '')}>{c.value ? `${c.value} (no longer a branch)` : 'Choose a branch'}</option>}
+        {randomizer.arms.map((a) => (
+          <option key={a.id} value={a.label}>
+            {a.label || '(unnamed branch)'}
+          </option>
+        ))}
+      </select>
+    );
+  }
   const list =
     q?.type === 'matrix' && (c.operator === 'is' || c.operator === 'is_not')
       ? q.columns

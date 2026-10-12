@@ -8,6 +8,7 @@ It is a static web app. Run it on your laptop, host it free on GitHub Pages, and
 
 **Building**
 - 15 question types: multiple choice, checkboxes, dropdown, rank order, rating scale (numbered bubbles or stars), matrix / Likert table, slider, Net Promoter Score, short text, paragraph, number, date, consent, constant sum, and text blocks for instructions or vignettes
+- Images and videos in any text: a video file (.mp4, .webm), or a YouTube, Vimeo or Google Drive link
 - Blocks and pages: all questions of a block on one page, or one per page
 - Likert presets in English and German (agreement, frequency, satisfaction, importance, likelihood, quality)
 - Option lists you can paste into: paste ten lines, get ten options. Enter adds a row, Backspace on an empty row removes it
@@ -19,7 +20,8 @@ It is a static web app. Run it on your laptop, host it free on GitHub Pages, and
 - Display logic on questions and blocks (all / any conditions, on answers, URL parameters or assigned conditions)
 - Skip logic after each block: jump forward or end the survey with a status like `screened_out`, an optional message and an optional redirect
 - Consent questions that end the survey when declined (status `declined_consent`)
-- Randomizers: show 1 of N blocks (between-subjects conditions) or several in random order, optionally balanced so groups stay even
+- A flowchart of the survey (Flow tab), like Qualtrics' survey flow: drag blocks into sequence, or onto each other to randomize between them
+- Randomizers with named branches: each respondent gets one branch (or several, in random order), optionally balanced so groups stay even. A branch can hold several blocks in a row, or none (a control group), and everyone continues with the same steps afterwards
 - Shuffle option order (keeping "Other" and "None of these" last), statement order and question order
 - Piping: `{{age}}`, `{{condition}}`, `{{PROLIFIC_PID}}`, `{{response_id}}` in question text, messages and redirect links
 
@@ -29,10 +31,11 @@ It is a static web app. Run it on your laptop, host it free on GitHub Pages, and
 - Redirect after completion, for example to your Prolific completion link
 - Open/close, response limit, automatic close date, one response per browser, resume unfinished answers
 - Respondent pages in English or German, mobile-friendly, built for keyboard and screen-reader use
-- Preview at desktop or phone width; test responses are kept separately and flagged
+- Preview in its own window, at desktop or phone width: start at any block, choose which branch you get, and skip required questions. Test responses are kept separately and flagged
 
 **Results**
 - Per-question summaries: counts and percentages, mean / median / SD, NPS, matrix heat tables, average rank
+- How many respondents got each branch of a randomizer, and every summary filtered to one branch
 - Response table and single-response view
 - CSV with numeric codes or labels, plus a CSV variant for Excel with German settings (semicolon, decimal comma)
 - Codebook (CSV and Markdown), SPSS label syntax, raw JSON, survey definition as JSON
@@ -98,7 +101,11 @@ GitHub Pages needs a **public** repository on the free plan. If you want to keep
 
 **Logic order.** Display logic and skip rules can only look at questions that come earlier. Skip rules only jump forward, so a survey can't loop. If a respondent goes back and changes an answer, answers on pages that no longer apply are discarded on submit.
 
-**Randomizers** live in the Flow tab. Tick the condition blocks, choose how many each person sees, and name the field (e.g. `condition`). The value saved is the block title, so give condition blocks clear names. "Keep groups balanced" assigns the condition with the fewest completed responses so far.
+**Flow and randomizers.** The Flow tab shows the survey as a flowchart. Drag a block between two steps to put it there, or onto another block to randomize between the two: they become two branches of a randomizer, and each respondent gets one. Drag more blocks into a branch (they run in sequence) or into "New branch". Each branch has a name, which is what's saved in the randomizer's field (e.g. `condition` = `Vignette`), so later questions can depend on it: give a question display logic "condition is not Vignette" to skip it for that group, and use "Use this logic on other questions" to copy that to many questions at once. "Keep group sizes even" gives each new respondent the branch with the fewest submitted responses so far. The *Three-condition video experiment* template is a ready-made example.
+
+**Preview.** Preview opens in its own window, so you can keep it next to the builder. Pick where to start (or use "Preview from this block" in a block's menu) and which branch to get. Starting at a block shows it as if the respondent had just arrived, without earlier answers. "Skip required questions" lets you click through; answers you do give are still checked. When you edit the survey, the preview offers to restart with the changes.
+
+**Images and videos.** In a question or text block, use the ▶ button below the text, or type `![description](https://…)`. Video files play in the browser's own player. YouTube videos play from youtube-nocookie.com and Vimeo with "do not track", but they still load from those sites; for strict data protection, put the video file on your own web space.
 
 **Statuses.** Every response records how it ended: `complete`, `declined_consent`, or the status you gave a skip rule (`screened_out`, `failed_attention`, …). Filter by it in Results, or use the `status` column in the export.
 
@@ -113,13 +120,13 @@ Worth knowing before you run a real study:
 - **Redirect links are visible.** Completion and screen-out links (for example a Prolific completion code) are part of the published survey, so a technically minded participant can find them without finishing. Check responses against your data before approving submissions.
 - **No bot protection or rate limiting.** Anyone with the link can submit, as often as they like, and could forge values. Screen your data (attention checks, durations, duplicate participant IDs).
 - **Balanced assignment counts submitted responses.** When many people start at the same moment, groups can drift apart until those responses arrive. For a large burst of simultaneous participants, plain random assignment may balance as well.
-- **Randomized blocks.** Assignments are recorded by block name, so don't rename condition blocks during data collection. Skip rules can't jump into a randomized block, and blocks inside a randomizer shouldn't have display logic of their own (the survey checker warns about both).
+- **Randomizer branches.** Assignments are recorded by branch name, so don't rename branches during data collection (conditions in your logic follow a rename, but responses already collected keep the old name). A skip rule that jumps to a block inside a randomizer goes to the branch the respondent got. Blocks inside a randomizer shouldn't have display logic of their own (the survey checker warns).
 - **Editing a live survey.** Deleting options or changing a question's type after responses arrive can make earlier answers export as empty. Download your data before big edits. People who resume a survey after you publish changes start again, with a new random assignment.
 - **Shuffled blocks.** In a block with shuffled questions, keep follow-up questions in the next block (the checker warns when a shuffled block contains its own follow-ups).
 
 ## Privacy and data protection
 
-- No tracking, analytics or third-party requests. Fonts are bundled with the app.
+- No tracking, analytics or third-party requests. Fonts are bundled with the app. The exception is what you add yourself: an image or video from another site, or a YouTube, Vimeo or Google Drive video, loads from there when respondents see it.
 - Responses contain what respondents enter, URL parameters you declare, timing, and the browser's user-agent string. The app doesn't store IP addresses with responses (Supabase, like any host, keeps short-lived request logs).
 - With Supabase you are the controller of the data and Supabase is your processor. Choose an EU region and see Supabase's data processing agreement if you need one for your ethics application.
 - Describe in your consent text what you collect and why.
@@ -138,13 +145,14 @@ src/
   lib/            survey model and logic, no UI
     types.ts        the Survey / Question / Response data model
     engine.ts       randomization, display & skip logic, validation, piping, clean-up
+    flow.ts         the survey as a flow: sequence, randomizers, branches (all structural edits)
     export.ts       CSV, codebook, SPSS syntax
     stats.ts        result summaries
     lint.ts         the pre-publish survey checker
     templates.ts    starter surveys
     backend/        browser storage and Supabase implementations
   components/     QuestionView (how respondents see a question), UI kit
-  pages/          Dashboard, Workspace (Build / Flow / Settings / Share / Results), Respond
+  pages/          Dashboard, Workspace (Build / Flow / Settings / Share / Results), Respond, PreviewWindow
 supabase/schema.sql   database tables, security rules and functions
 public/config.js      runtime Supabase settings
 ```
@@ -153,4 +161,4 @@ A survey is plain JSON (see `src/lib/types.ts`), so you can download, version an
 
 ## Ideas for later
 
-File uploads, quotas, multi-language surveys (the same survey in two languages), email invitations and reminders, response editing, and a survey-flow canvas.
+File uploads, quotas, multi-language surveys (the same survey in two languages), email invitations and reminders, response editing, and a minimum viewing time before respondents can continue (for videos).

@@ -1,14 +1,13 @@
 import { Fragment, type ReactNode } from 'react';
-import { INLINE } from '../lib/markdown';
+import { INLINE, mediaFor } from '../lib/markdown';
 
 export { plainText } from '../lib/markdown';
 
 // A deliberately tiny, safe Markdown subset for question text and messages:
 // paragraphs (blank line), line breaks, **bold**, *italic* / _italic_,
-// [links](https://...) and images ![description](https://...). Output is React
-// elements, never raw HTML, so piped answers from respondents can't inject markup.
+// [links](https://...) and images or videos ![description](https://...). Output is
+// React elements, never raw HTML, so piped answers from respondents can't inject markup.
 // Underscores inside words (snake_case, panel IDs) are left alone.
-
 
 function safeHref(href: string): string | null {
   return /^(https?:|mailto:)/i.test(href) ? href : null;
@@ -25,7 +24,28 @@ function inline(text: string, keyBase: string): ReactNode[] {
     }
     const img = /^!\[([^\]]*)\]\(([^)\s]+)\)$/.exec(part);
     if (img) {
-      return /^https:\/\//i.test(img[2]) ? <img key={key} className="rich-img" src={img[2]} alt={img[1]} loading="lazy" /> : <Fragment key={key}>{img[1]}</Fragment>;
+      const media = mediaFor(img[2]);
+      if (!media) return <Fragment key={key}>{img[1]}</Fragment>;
+      if (media.kind === 'video')
+        return (
+          <video key={key} className="rich-video" src={media.src} controls playsInline preload="metadata" aria-label={img[1] || undefined}>
+            {img[1]}
+          </video>
+        );
+      if (media.kind === 'player')
+        return (
+          <span key={key} className="rich-player">
+            <iframe
+              src={media.src}
+              title={img[1] || `${media.provider} video`}
+              loading="lazy"
+              allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+              allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+          </span>
+        );
+      return <img key={key} className="rich-img" src={media.src} alt={img[1]} loading="lazy" />;
     }
     const link = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(part);
     if (link) {

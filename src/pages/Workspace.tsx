@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Dialog, Empty, ErrorBoundary, Icon, IconButton, Spinner, useToast } from '../components/ui';
 import { useBackend } from '../lib/backend/context';
 import { lintSurvey, type Issue } from '../lib/lint';
+import { previewHash, previewWindowName, writePreviewDraft } from '../lib/preview';
 import { navigate } from '../lib/router';
 import type { Survey, SurveyRecord } from '../lib/types';
 import { useUndoable, type Updater } from '../lib/useUndoable';
 import { Builder } from './builder/Builder';
 import { Flow } from './Flow';
-import { Respond } from './Respond';
 import { Results } from './Results';
 import { SettingsTab } from './SettingsTab';
 import { ShareTab } from './ShareTab';
@@ -32,7 +32,6 @@ export function Workspace({ id, tab }: { id: string; tab: string }) {
   const draftUpdate = draft.update;
   const update: Updater<Survey> = useCallback((mutate, opts) => draftUpdate((s) => void (s && mutate(s)), opts), [draftUpdate]);
   const [saveState, setSaveState] = useState<SaveState>('saved');
-  const [previewOpen, setPreviewOpen] = useState(false);
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [publishing, setPublishing] = useState(false);
   // JSON of what's stored, so undoing back to it doesn't count as a change (and other edits always save).
@@ -80,6 +79,27 @@ export function Workspace({ id, tab }: { id: string; tab: string }) {
     }, 700);
     return () => clearTimeout(timer);
   }, [survey, backend, id, toast]);
+
+  // An open preview window picks up the working copy from here and offers to restart with it.
+  useEffect(() => {
+    if (!survey) return;
+    const timer = setTimeout(() => writePreviewDraft(id, survey), 400);
+    return () => clearTimeout(timer);
+  }, [survey, id]);
+
+  const openPreview = useCallback(
+    (fromBlockId?: string) => {
+      if (!survey) return;
+      writePreviewDraft(id, survey);
+      const { origin, pathname } = window.location;
+      // The nonce makes an already open preview window restart, even at the same block.
+      const url = `${origin}${pathname}${previewHash(id, fromBlockId, Date.now().toString(36))}`;
+      const w = window.open(url, previewWindowName(id));
+      if (w) w.focus();
+      else toast('Your browser blocked the preview window. Allow pop-ups for this site and try again.', 'error');
+    },
+    [id, survey, toast],
+  );
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
@@ -189,7 +209,7 @@ export function Workspace({ id, tab }: { id: string; tab: string }) {
           </span>
           <IconButton icon="undo" label="Undo" onClick={draft.undo} disabled={!draft.canUndo} />
           <IconButton icon="redo" label="Redo" onClick={draft.redo} disabled={!draft.canRedo} />
-          <Button icon="eye" onClick={() => setPreviewOpen(true)}>
+          <Button icon="eye" iconAfter="external" onClick={() => openPreview()} title="Opens in a new window">
             Preview
           </Button>
           <Button variant="primary" icon="share" onClick={publish} disabled={publishing || (!hasChanges && !!record.published)}>
@@ -207,15 +227,13 @@ export function Workspace({ id, tab }: { id: string; tab: string }) {
 
       <div className="ws-body">
         <ErrorBoundary key={active}>
-        {active === 'build' && <Builder survey={survey} update={update} />}
-        {active === 'flow' && <Flow survey={survey} update={update} surveyId={id} />}
+        {active === 'build' && <Builder survey={survey} update={update} onPreview={openPreview} />}
+        {active === 'flow' && <Flow survey={survey} update={update} surveyId={id} onPreview={openPreview} />}
         {active === 'settings' && <SettingsTab survey={survey} update={update} />}
         {active === 'share' && <ShareTab backend={backend} record={record} survey={survey} hasChanges={hasChanges} onPublish={publish} onStatus={setStatus} />}
         {active === 'results' && <Results backend={backend} surveyId={id} survey={record.published ?? survey} />}
         </ErrorBoundary>
       </div>
-
-      {previewOpen && <PreviewOverlay survey={survey} surveyId={id} onClose={() => setPreviewOpen(false)} />}
 
       <Dialog
         open={!!issues}
@@ -243,49 +261,6 @@ export function Workspace({ id, tab }: { id: string; tab: string }) {
           ))}
         </ul>
       </Dialog>
-    </div>
-  );
-}
-
-function PreviewOverlay({ survey, surveyId, onClose }: { survey: Survey; surveyId: string; onClose: () => void }) {
-  const [device, setDevice] = useState<'desktop' | 'phone'>('desktop');
-  const [run, setRun] = useState(0);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    document.body.classList.add('no-scroll');
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.classList.remove('no-scroll');
-    };
-  }, [onClose]);
-  return (
-    <div className="preview-overlay" role="dialog" aria-modal="true" aria-label="Preview">
-      <div className="preview-bar">
-        <div className="preview-label">
-          <strong>Preview</strong>
-          <span className="hint">Logic and randomization run for real. Submitted answers are kept as test responses.</span>
-        </div>
-        <div className="segmented" role="group" aria-label="Screen size">
-          <button type="button" className={device === 'desktop' ? 'is-on' : ''} aria-pressed={device === 'desktop'} onClick={() => setDevice('desktop')}>
-            <Icon name="desktop" size={16} /> Desktop
-          </button>
-          <button type="button" className={device === 'phone' ? 'is-on' : ''} aria-pressed={device === 'phone'} onClick={() => setDevice('phone')}>
-            <Icon name="phone" size={16} /> Phone
-          </button>
-        </div>
-        <Button icon="undo" onClick={() => setRun((n) => n + 1)}>
-          Restart
-        </Button>
-        <Button variant="primary" onClick={onClose}>
-          Close preview
-        </Button>
-      </div>
-      <div className="preview-scroll">
-        <div className={`preview-frame preview-${device}`}>
-          <Respond key={run} surveyId={surveyId} previewSurvey={survey} />
-        </div>
-      </div>
     </div>
   );
 }

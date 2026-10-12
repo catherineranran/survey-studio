@@ -4,6 +4,7 @@ import { AutoTextarea, Field, Icon, Menu, NumberInput, Toggle } from '../../comp
 import { uid } from '../../lib/ids';
 import { SCALE_PRESETS, makeChoices } from '../../lib/questionTypes';
 import type { Choice, Lang, Question, Survey } from '../../lib/types';
+import { MediaDialog } from './MediaDialog';
 
 const DEFAULT_TITLES = new Set(['Untitled question', 'Neue Frage', 'Instructions', 'Hinweise']);
 
@@ -15,6 +16,7 @@ export function QuestionEditor({ survey, q, change }: { survey: Survey; q: Quest
   const selectedOnFocus = useRef(false);
   // The text field last typed in, so the Bold/Italic buttons know where to act.
   const lastField = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const [mediaOpen, setMediaOpen] = useState(false);
   const format = (mark: Mark) => {
     const el = lastField.current;
     if (el && el.isConnected) applyMark(el, mark);
@@ -75,9 +77,17 @@ export function QuestionEditor({ survey, q, change }: { survey: Survey; q: Quest
           >
             <i>I</i>
           </button>
+          <button type="button" className="format-btn" title="Add an image or video" aria-label="Add an image or video" onClick={() => setMediaOpen(true)}>
+            <Icon name="play" size={14} />
+          </button>
         </span>
+        <MediaDialog
+          open={mediaOpen}
+          onClose={() => setMediaOpen(false)}
+          onInsert={(mark) => change((x) => void (x.description = x.description?.trim() ? `${x.description.trimEnd()}\n\n${mark}` : mark))}
+        />
         <p className="hint qedit-hint">
-          Select words in the question, an option, a statement or a scale label, then press B or I (or Ctrl/⌘+B, Ctrl/⌘+I). They’re stored as **bold** and *italic*. Also: [links](https://…), images ![description](https://…), and earlier answers with {'{{'}variable{'}}'}.
+          Select words in the question, an option, a statement or a scale label, then press B or I (or Ctrl/⌘+B, Ctrl/⌘+I). They’re stored as **bold** and *italic*. Also: [links](https://…), earlier answers with {'{{'}variable{'}}'}, and images or videos ![description](https://…): a picture or video file (.mp4, .webm) on the web, or a YouTube, Vimeo or Google Drive link.
         </p>
       </div>
     </div>

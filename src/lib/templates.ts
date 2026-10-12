@@ -3,7 +3,8 @@
 
 import { uid } from './ids';
 import { SCALE_PRESETS, defaultText, makeChoices } from './questionTypes';
-import type { Block, Lang, Question, Survey, SurveySettings } from './types';
+import { tidy } from './flow';
+import type { Block, Lang, Question, Randomizer, RandomizerArm, Survey, SurveySettings } from './types';
 
 export const ACCENTS = [
   { name: 'Form green', value: '#136f55' },
@@ -219,7 +220,18 @@ function experiment(id: string): Survey {
     schema: 1,
     id,
     title: 'Framing experiment (two conditions)',
-    randomizers: [{ id: uid('rz'), variable: 'condition', blockIds: [vignetteA.id, vignetteB.id], present: 1, balance: true }],
+    randomizers: [
+      {
+        id: uid('rz'),
+        variable: 'condition',
+        arms: [
+          { id: uid('arm'), label: 'Gain frame', blockIds: [vignetteA.id] },
+          { id: uid('arm'), label: 'Loss frame', blockIds: [vignetteB.id] },
+        ],
+        present: 1,
+        balance: true,
+      },
+    ],
     urlParams: [
       { id: uid('p'), name: 'PROLIFIC_PID', required: false },
       { id: uid('p'), name: 'STUDY_ID', required: false },
@@ -238,6 +250,94 @@ function experiment(id: string): Survey {
     blocks: [block('Consent', [consent]), vignetteA, vignetteB, outcome],
   };
   return survey;
+}
+
+function videoExperiment(id: string): Survey {
+  const stimulus = (title: string, body: string) => block(title, [q('text_block', '', 'Please watch carefully', { description: body })]);
+  const ai = stimulus(
+    'AI-generated video',
+    '**[Add the AI-generated video here.]** Open this text in the Build tab and use the ▶ button to add a link to a video file, or to a YouTube, Vimeo or Google Drive video.',
+  );
+  const vignette = block('Vignette', [
+    q('text_block', '', 'Please read carefully', {
+      description: '**[Write the vignette here.]** A short written scenario that describes the same situation as the videos.',
+    }),
+  ]);
+  const captured = stimulus('Captured video', '**[Add the captured (real) video here.]** Use the ▶ button below the text to add the link.');
+
+  const realism = q('rating_scale', 'realism', 'How realistic did the situation you just saw or read about seem to you?', {
+    required: true,
+    scale: { min: 1, max: 7, style: 'numbers', minLabel: 'Not at all realistic', maxLabel: 'Completely realistic', pointLabels: [] },
+  });
+  const attitudes = q('matrix', 'resp', 'How much do you agree with the following statements?', {
+    required: true,
+    randomizeRows: true,
+    rows: makeChoices(['The content was believable.', 'I felt emotionally involved.', 'I would like to know more about this topic.'], 'r'),
+    columns: makeChoices(SCALE_PRESETS[0].labels.en, 'k'),
+  });
+  const realisticVideo = q('rating_scale', 'video_quality', 'How would you rate the picture and sound quality of the video?', {
+    required: true,
+    scale: { min: 1, max: 5, style: 'numbers', minLabel: 'Very poor', maxLabel: 'Very good', pointLabels: [] },
+  });
+  const watched = q('single_choice', 'watched_all', 'Did you watch the video until the end?', {
+    required: true,
+    choices: makeChoices(['Yes', 'No']),
+    layout: 'horizontal',
+  });
+  const check = q('single_choice', 'manip_check', 'What did you see before these questions?', {
+    required: true,
+    choices: makeChoices(['A video', 'A written text', 'I don’t remember']),
+  });
+  const r: Randomizer = {
+    id: uid('rz'),
+    variable: 'condition',
+    arms: [
+      { id: uid('arm'), label: 'AI-generated video', blockIds: [ai.id] },
+      { id: uid('arm'), label: 'Vignette', blockIds: [vignette.id] },
+      { id: uid('arm'), label: 'Captured video', blockIds: [captured.id] },
+    ],
+    present: 1,
+    balance: true,
+  };
+  // Video questions don't apply to people who read the vignette.
+  const notVignette = () => ({ match: 'all' as const, conditions: [{ id: uid('cd'), source: `param:${r.variable}`, operator: 'is_not' as const, value: 'Vignette' }] });
+  realisticVideo.displayLogic = notVignette();
+  watched.displayLogic = notVignette();
+
+  return {
+    schema: 1,
+    id,
+    title: 'Video experiment (three conditions)',
+    randomizers: [r],
+    urlParams: [
+      { id: uid('p'), name: 'PROLIFIC_PID', required: false },
+      { id: uid('p'), name: 'STUDY_ID', required: false },
+      { id: uid('p'), name: 'SESSION_ID', required: false },
+    ],
+    settings: {
+      ...defaultSettings('en'),
+      allowBack: false,
+      welcomeEnabled: true,
+      welcomeTitle: 'Perceptions of media content',
+      welcomeText: 'This study takes about 8 minutes. You will watch a short video or read a short text, then answer some questions about it. Please use headphones or turn your sound on.',
+      endTitle: 'Thank you!',
+      endMessage: 'Your response has been recorded.',
+    },
+    blocks: [
+      block('Consent', [consentQuestion()]),
+      ai,
+      vignette,
+      captured,
+      block('Questionnaire', [realism, attitudes, realisticVideo, watched, check]),
+      block('Demographics', [
+        q('number', 'age', 'How old are you?', { required: true, placeholder: 'Age in years', validation: { min: 18, max: 110, integer: true } }),
+        q('single_choice', 'gender', 'What is your gender?', {
+          required: true,
+          choices: [...makeChoices(['Woman', 'Man', 'Non-binary']), { id: uid('c'), label: 'I prefer not to say', code: 99 }],
+        }),
+      ]),
+    ],
+  };
 }
 
 function feedback(id: string): Survey {
@@ -305,6 +405,12 @@ export const TEMPLATES: Template[] = [
     build: experiment,
   },
   {
+    id: 'video-experiment',
+    name: 'Three-condition video experiment',
+    description: 'Balanced random assignment to an AI-generated video, a written vignette or a captured video. Everyone answers the same questionnaire; video questions are skipped for the vignette group.',
+    build: videoExperiment,
+  },
+  {
     id: 'feedback',
     name: 'Feedback form',
     description: 'Net Promoter Score with follow-ups that depend on the score, star rating and an optional email.',
@@ -312,25 +418,51 @@ export const TEMPLATES: Template[] = [
   },
 ];
 
+/** Randomizers from older files listed single blocks; each becomes a branch named after its block. */
+function normalizeRandomizer(raw: Partial<Randomizer>, blocks: Block[]): Randomizer {
+  const title = (blockId: string) => blocks.find((b) => b.id === blockId)?.title.trim() || blockId;
+  // Old files could list blocks that no longer exist; tidy() drops their (then empty) branches.
+  const arms: RandomizerArm[] = Array.isArray(raw.arms)
+    ? raw.arms.map((a, i) => ({
+        id: typeof a?.id === 'string' && a.id ? a.id : uid('arm'),
+        label: typeof a?.label === 'string' ? a.label : `Branch ${i + 1}`,
+        blockIds: Array.isArray(a?.blockIds) ? a.blockIds.filter((x): x is string => typeof x === 'string') : [],
+      }))
+    : (Array.isArray(raw.blockIds) ? raw.blockIds : []).map((blockId) => ({ id: `arm_${blockId}`, label: title(blockId), blockIds: [blockId] }));
+  return {
+    id: raw.id || uid('rz'),
+    variable: typeof raw.variable === 'string' && raw.variable ? raw.variable : 'condition',
+    arms,
+    present: Math.max(1, Math.floor(Number(raw.present)) || 1),
+    balance: raw.balance !== false,
+  };
+}
+
 /** Brings older or imported survey files up to the current shape. */
 export function normalizeSurvey(raw: unknown, id: string): Survey {
+  const survey = readSurvey(raw, id);
+  tidy(survey);
+  return survey;
+}
+
+function readSurvey(raw: unknown, id: string): Survey {
   const s = (raw ?? {}) as Partial<Survey>;
   const settings = { ...defaultSettings((s.settings?.language as Lang) ?? 'en'), ...(s.settings ?? {}) };
-  const blocks = Array.isArray(s.blocks) ? s.blocks : [];
+  const blocks: Block[] = (Array.isArray(s.blocks) ? s.blocks : []).map((b) => ({
+    id: b.id || uid('b'),
+    title: typeof b.title === 'string' ? b.title : 'Block',
+    pageMode: b.pageMode === 'each' ? 'each' : 'single',
+    randomizeQuestions: !!b.randomizeQuestions,
+    displayLogic: b.displayLogic ?? null,
+    branches: Array.isArray(b.branches) ? b.branches : [],
+    questions: Array.isArray(b.questions) ? b.questions.map((x) => ({ ...x, id: x.id || uid('q'), required: !!x.required })) : [],
+  }));
   return {
     schema: 1,
     id,
     title: typeof s.title === 'string' && s.title.trim() ? s.title : 'Untitled survey',
-    blocks: blocks.map((b) => ({
-      id: b.id || uid('b'),
-      title: b.title ?? 'Block',
-      pageMode: b.pageMode === 'each' ? 'each' : 'single',
-      randomizeQuestions: !!b.randomizeQuestions,
-      displayLogic: b.displayLogic ?? null,
-      branches: Array.isArray(b.branches) ? b.branches : [],
-      questions: Array.isArray(b.questions) ? b.questions.map((x) => ({ ...x, id: x.id || uid('q'), required: !!x.required })) : [],
-    })),
-    randomizers: Array.isArray(s.randomizers) ? s.randomizers : [],
+    blocks,
+    randomizers: (Array.isArray(s.randomizers) ? s.randomizers : []).map((r) => normalizeRandomizer(r, blocks)),
     urlParams: Array.isArray(s.urlParams) ? s.urlParams : [],
     settings,
   };

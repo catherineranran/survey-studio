@@ -96,10 +96,6 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-body.no-scroll {
-  overflow: hidden;
-}
-
 h1,
 h2,
 h3,
@@ -1801,6 +1797,19 @@ input:focus-visible + .mark {
   outline-offset: -2px;
 }
 
+.media-form {
+  display: grid;
+  gap: 14px;
+}
+
+.media-preview {
+  max-height: 280px;
+  overflow: auto;
+  padding: 8px;
+  background: var(--sunk);
+  border-radius: var(--r-m);
+}
+
 .sub-label {
   font-size: 13px;
   font-weight: 700;
@@ -2063,104 +2072,467 @@ input:focus-visible + .mark {
   color: var(--ink-3);
 }
 
-/* ------------------------------------------------------- flow & settings */
+/* ---------------------------------------------------------- flowchart */
 
-.flow-map {
-  list-style: none;
-  margin: 0;
-  padding: 0 0 0 4px;
-  position: relative;
+.page-flow {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 20px 72px;
+  display: grid;
+  gap: 18px;
 }
 
-.flow-map::before {
+.page-flow .notice {
+  margin: 0;
+}
+
+.fc {
+  --wire: color-mix(in oklab, var(--form) 45%, transparent);
+  --wire-rand: color-mix(in oklab, var(--logic) 55%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0 2px;
+}
+
+.fc-terminal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.fc-pill {
+  padding: 4px 18px;
+  border-radius: 999px;
+  background: var(--graphite);
+  color: var(--paper);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.fc-note {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+/* Connectors between steps; while dragging they open into drop slots. */
+.fc-gap {
+  position: relative;
+  align-self: stretch;
+  flex: none;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: height 0.12s ease;
+}
+
+.fc-gap::before {
   content: '';
   position: absolute;
-  left: 11px;
-  top: 12px;
-  bottom: 12px;
+  left: calc(50% - 1px);
+  top: 0;
+  bottom: 5px;
   width: 2px;
-  background: var(--line);
+  background: var(--wire);
 }
 
-.flow-node {
-  position: relative;
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-  padding: 8px 0;
+.fc-gap::after {
+  content: '';
+  position: absolute;
+  left: calc(50% - 5px);
+  bottom: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--wire);
 }
 
-.flow-dot {
+.fc-gap.is-live {
+  height: 46px;
+}
+
+.fc-slot {
   position: relative;
   z-index: 1;
-  flex: none;
   display: grid;
   place-items: center;
-  width: 16px;
-  height: 16px;
-  margin-top: 3px;
-  border-radius: 50%;
-  border: 2px solid var(--form);
+  width: min(80%, 240px);
+  height: 14px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--on-form);
   background: var(--paper);
+  border: 1.5px dashed var(--form);
+  border-radius: 999px;
+  transition: height 0.12s ease;
 }
 
-.flow-terminal .flow-dot {
-  background: var(--graphite);
-  border-color: var(--graphite);
+.fc-gap.is-over .fc-slot {
+  height: 30px;
+  background: var(--form);
+  border-style: solid;
 }
 
-.flow-terminal {
-  font-weight: 650;
-  color: var(--ink-2);
-}
-
-.flow-data .flow-dot {
-  border-style: dashed;
-}
-
-.flow-dot-shuffle {
-  width: 22px;
-  height: 22px;
-  margin-left: -3px;
-  margin-top: 0;
-  color: var(--logic);
-  border-color: var(--logic);
-}
-
-.flow-group-title {
-  font-weight: 650;
-  color: var(--logic);
-}
-
-.flow-group-list {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
+/* Blocks */
+.fc-block {
+  /* Positioned, so it paints over the wires; no z-index, so its menu can overlap neighbours. */
+  position: relative;
   display: grid;
-  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: start;
+  width: min(100%, 460px);
+  padding: 8px 6px 8px 4px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--form);
+  border-radius: var(--r-m);
+  cursor: grab;
 }
 
-.flow-group-list > li {
-  padding: 10px 12px;
-  border: 1px dashed var(--logic);
+.fc-block:hover {
+  border-color: color-mix(in oklab, var(--form) 55%, var(--line));
+  border-left-color: var(--form);
+}
+
+.fc-block.is-dragging,
+.fc-rand.is-dragging {
+  opacity: 0.4;
+}
+
+.fc-block.is-over {
+  border-color: var(--logic);
+  box-shadow: 0 0 0 3px var(--logic-tint);
+}
+
+.fc-grip {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 28px;
+  color: var(--ink-3);
+  cursor: grab;
+}
+
+.fc-block-main {
+  display: grid;
+  gap: 1px;
+  padding-top: 3px;
+  min-width: 0;
+}
+
+.fc-block-title {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.fc-block-meta {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.fc-rule {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  font-size: 12.5px;
+  color: var(--logic);
+}
+
+.fc-rule .icon {
+  flex: none;
+  transform: translateY(2px);
+}
+
+.fc-onto {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 8px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--logic);
+  background: var(--logic-tint);
+  border-radius: var(--r-s);
+}
+
+/* Randomizers: a header, then one column per branch that fans out and joins again. */
+.fc-rand {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+}
+
+.fc-rand-head {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  width: min(100%, 680px);
+  margin: 0 auto;
+  padding: 8px 6px 8px 4px;
+  background: var(--logic-tint);
+  border: 1px solid var(--wire-rand);
   border-radius: var(--r-m);
 }
 
-.flow-block {
+.fc-rand-head::after {
+  content: '';
+  position: absolute;
+  left: calc(50% - 1px);
+  top: 100%;
+  height: 17px;
+  width: 2px;
+  background: var(--wire-rand);
+}
+
+.fc-rand-icon {
   display: grid;
-  gap: 2px;
-}
-
-.flow-block-title {
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
-  flex-wrap: wrap;
-}
-
-.flow-rule {
-  font-size: 13.5px;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 1px;
+  border-radius: 50%;
   color: var(--logic);
+  background: var(--paper);
+  border: 1.5px solid var(--logic);
+}
+
+.fc-rand-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.fc-rand-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+.fc-rand-line strong {
+  color: var(--logic);
+  font-size: 14.5px;
+}
+
+.fc-inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.fc-inline .input {
+  width: auto;
+}
+
+.fc-var.input {
+  width: 15ch;
+}
+
+.input.is-invalid {
+  border-color: var(--danger);
+}
+
+.fc-balance {
+  font-size: 13.5px;
+}
+
+.fc-lanes-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* Same width as the "new branch" column, so the branches stay centred under the header. */
+.fc-lanes-spacer,
+.fc-newlane {
+  flex: 0 0 104px;
+}
+
+.fc-lanes {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+.fc-lane {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 0;
+}
+
+.fc-lane::before {
+  content: '';
+  position: absolute;
+  left: calc(50% - 1px);
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--wire-rand);
+}
+
+.fc-wire {
+  position: absolute;
+  left: -8px;
+  right: -8px;
+  height: 2px;
+  background: var(--wire-rand);
+}
+
+.fc-wire-top {
+  top: 0;
+}
+
+.fc-wire-bottom {
+  bottom: 0;
+}
+
+.fc-lane:first-child .fc-wire {
+  left: 50%;
+}
+
+.fc-lane:last-child .fc-wire {
+  right: 50%;
+}
+
+.fc-lane .fc-block {
+  width: 100%;
+}
+
+/* Inside a branch the column's own wire connects everything. */
+.fc-lane .fc-gap::before,
+.fc-lane .fc-gap::after {
+  display: none;
+}
+
+.fc-lane .fc-gap {
+  height: 16px;
+}
+
+.fc-lane .fc-gap.is-live {
+  height: 40px;
+}
+
+.fc-lane-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  padding: 2px 2px 2px 4px;
+  background: var(--paper);
+  border: 1.5px dashed var(--logic);
+  border-radius: var(--r-m);
+}
+
+.fc-lane-head.is-invalid {
+  border-color: var(--danger);
+}
+
+.fc-lane-name {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-s);
+}
+
+.fc-lane-name:focus {
+  outline: 2px solid var(--form);
+  outline-offset: 0;
+}
+
+.fc-lane-note {
+  position: relative;
+  margin-top: 4px;
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--logic);
+  background: var(--paper);
+}
+
+.fc-lane-note.is-error {
+  color: var(--danger);
+}
+
+.fc-lane-empty {
+  position: relative;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  text-align: center;
+  color: var(--ink-3);
+  background: var(--paper);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-m);
+}
+
+.fc-newlane {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+.fc-newlane.is-live {
+  align-items: center;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--form);
+  border: 1.5px dashed var(--form);
+  border-radius: var(--r-m);
+}
+
+.fc-newlane.is-over {
+  color: var(--on-form);
+  background: var(--form);
+  border-style: solid;
+}
+
+@media (max-width: 760px) {
+  .fc-lanes-row,
+  .fc-lanes {
+    flex-direction: column;
+  }
+
+  .fc-lanes-spacer,
+  .fc-rand-head::after,
+  .fc-lane::before,
+  .fc-wire {
+    display: none;
+  }
+
+  .fc-lane {
+    max-width: none;
+    padding: 10px;
+    border: 1.5px dashed var(--wire-rand);
+    border-radius: var(--r-m);
+  }
+
+  .fc-newlane {
+    flex-basis: auto;
+    min-height: 44px;
+  }
 }
 
 .checks {
@@ -2193,6 +2565,7 @@ input:focus-visible + .mark {
 .param-rows {
   display: grid;
   gap: 10px;
+  max-width: 760px;
 }
 
 .param-row {
@@ -2773,13 +3146,56 @@ input:focus-visible + .mark {
 
 /* -------------------------------------------------------------- preview */
 
-.preview-overlay {
+/* The preview window: a toolbar for testing above the survey as respondents see it. */
+.pw {
   position: fixed;
   inset: 0;
-  z-index: 60;
   display: flex;
   flex-direction: column;
   background: var(--canvas);
+}
+
+.pw-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink-2);
+}
+
+.pw-field select {
+  max-width: 230px;
+}
+
+.pw-check {
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.pw-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--logic-tint);
+  border-bottom: 1px solid var(--line-2);
+}
+
+.pw-banner .icon {
+  color: var(--logic);
+}
+
+.preview-empty {
+  padding: 14px 16px;
+  font-size: 15px;
+  color: var(--ink-2);
+  background: var(--paper);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-m);
 }
 
 .preview-bar {
@@ -2794,7 +3210,7 @@ input:focus-visible + .mark {
 
 .preview-label {
   display: grid;
-  flex: 1 1 280px;
+  flex: 1 1 180px;
 }
 
 .preview-scroll {
@@ -3041,6 +3457,33 @@ input:focus-visible + .mark {
   height: auto;
   margin: 4px 0;
   border-radius: var(--r-m);
+}
+
+.rich-video,
+.rich-player {
+  display: block;
+  width: 100%;
+  margin: 6px 0;
+  border-radius: var(--r-m);
+  background: #000;
+}
+
+.rich-video {
+  max-height: 75vh;
+}
+
+.rich-player {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+}
+
+.rich-player iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 
 /* progress as answer-sheet timing marks */
@@ -3697,4 +4140,25 @@ input:focus-visible + .mark {
     grid-column: 1 / -1;
     grid-row: 2;
   }
+}
+
+/* copy logic dialog */
+.copy-logic-list {
+  display: grid;
+  gap: 14px;
+  max-height: 52vh;
+  overflow: auto;
+}
+
+.copy-logic-var {
+  flex: none;
+  color: var(--ink-3);
+}
+
+.copy-logic-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }

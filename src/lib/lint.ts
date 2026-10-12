@@ -2,6 +2,7 @@
 
 import { allQuestions } from './engine';
 import { buildColumns } from './export';
+import { placeOf } from './flow';
 import { RESERVED_NAMES, VARIABLE_RE } from './ids';
 import { TYPE_INFO } from './questionTypes';
 import type { Logic, Question, Survey } from './types';
@@ -113,6 +114,15 @@ export function lintSurvey(s: Survey): Issue[] {
       if (br.target !== 'end') {
         if (!blockPos.has(br.target)) err(`${name} goes to a block that no longer exists.`, where);
         else if (blockPos.get(br.target)! <= blockPos.get(b.id)!) warn(`${name} jumps backwards; skip logic only jumps forward, so this rule is ignored.`, where);
+        else {
+          const to = placeOf(s, br.target);
+          const from = placeOf(s, b.id);
+          const title = s.blocks.find((x) => x.id === br.target)?.title ?? '';
+          if (to && to.randomizer !== from?.randomizer && to.index > 0)
+            warn(`${name} jumps to “${title}”, inside randomizer “${to.randomizer.variable}”. Respondents go to the start of the randomizer and see their whole branch.`, where);
+          if (to && from && to.randomizer === from.randomizer && to.arm !== from.arm)
+            warn(`${name} jumps to “${title}” in another branch of randomizer “${to.randomizer.variable}”; respondents who didn’t get that branch ignore it.`, where);
+        }
       }
       if (br.endRedirect && !/^https?:\/\//i.test(br.endRedirect.trim())) warn(`${name}: the redirect should start with https://.`, where);
     });
@@ -121,26 +131,21 @@ export function lintSurvey(s: Survey): Issue[] {
   // Randomizers
   const owned = new Map<string, string>();
   for (const r of s.randomizers) {
-    const live = r.blockIds.filter((id) => blockPos.has(id));
-    const titles = live.map((id) => s.blocks.find((b) => b.id === id)!.title.trim());
-    if (new Set(titles).size !== titles.length) err(`Randomizer “${r.variable}” has blocks with the same name, so the recorded condition can’t tell them apart.`);
-    if (titles.some((t) => t.includes('|'))) err(`Randomizer “${r.variable}”: block names can’t contain “|”.`);
-    for (const id of live) {
+    const arms = r.arms ?? [];
+    const labels = arms.map((a) => a.label.trim());
+    if (arms.length < 2) warn(`Randomizer “${r.variable}” has fewer than two branches, so nothing is randomized.`);
+    if (labels.some((l) => !l)) err(`Randomizer “${r.variable}” has a branch without a name. The name is what your data records for that group.`);
+    if (new Set(labels.map((l) => l.toLowerCase())).size !== labels.length) err(`Randomizer “${r.variable}” has branches with the same name, so your data can’t tell those groups apart.`);
+    if (labels.some((l) => l.includes('|'))) err(`Randomizer “${r.variable}”: branch names can’t contain “|”.`);
+    for (const a of arms) if (!a.blockIds.length) warn(`Randomizer “${r.variable}”: branch “${a.label}” has no blocks, so people who get it see nothing there.`);
+    if (r.present > arms.length) warn(`Randomizer “${r.variable}” gives ${r.present} branches but only has ${arms.length}.`);
+    for (const id of arms.flatMap((a) => a.blockIds).filter((x) => blockPos.has(x))) {
       const b = s.blocks.find((x) => x.id === id)!;
       if (b.displayLogic?.conditions.length)
-        warn(`Block “${b.title}” is in randomizer “${r.variable}” and also has display logic, so some respondents may be assigned to it without seeing it.`, { blockId: id });
-    }
-    for (const b of s.blocks)
-      b.branches.forEach((br, i) => {
-        if (live.includes(br.target))
-          warn(`Block “${b.title}”, skip rule ${i + 1} jumps to “${s.blocks.find((x) => x.id === br.target)!.title}”, which is in a randomizer. Respondents assigned to another condition won’t jump; target the block before the randomizer instead.`, { blockId: b.id });
-      });
-    if (live.length < 2) warn(`Randomizer “${r.variable}” has fewer than two blocks, so nothing is randomized.`);
-    for (const id of live) {
+        warn(`Block “${b.title}” is in randomizer “${r.variable}” and also has display logic, so some people may be assigned to it without seeing it.`, { blockId: id });
       if (owned.has(id)) err(`A block is in two randomizers (“${owned.get(id)}” and “${r.variable}”).`, { blockId: id });
       owned.set(id, r.variable);
     }
-    if (r.present > live.length) warn(`Randomizer “${r.variable}” shows ${r.present} blocks but only has ${live.length}.`);
   }
 
   if (s.settings.redirectUrl && !/^https?:\/\//i.test(s.settings.redirectUrl.trim())) warn('The redirect link in Settings should start with https://.');
@@ -160,8 +165,11 @@ export function lintSurvey(s: Survey): Issue[] {
     for (const c of logic?.conditions ?? []) {
       if (c.source.startsWith('param:')) {
         const n = c.source.slice(6);
-        const known = s.urlParams.some((p) => p.name === n) || s.randomizers.some((r) => r.variable === n);
+        const randomizer = s.randomizers.find((r) => r.variable === n);
+        const known = s.urlParams.some((p) => p.name === n) || !!randomizer;
         if (!known) err(`${name} uses “${n}”, which is no longer a URL parameter or randomizer.`, where);
+        if (randomizer && ['is', 'is_not', 'includes', 'excludes'].includes(c.operator) && !randomizer.arms.some((a) => a.label === c.value))
+          err(`${name} checks a branch of “${n}” that no longer exists. Pick the branch again.`, where);
         continue;
       }
       const src = questions.find((x) => x.id === c.source);

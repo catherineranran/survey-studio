@@ -66,6 +66,9 @@ const PATHS: Record<string, ReactNode> = {
     </g>
   ),
   back: <path d="M15 18l-6-6 6-6" />,
+  left: <path d="M19 12H5M11 6l-6 6 6 6" />,
+  right: <path d="M5 12h14M13 6l6 6-6 6" />,
+  exit: <path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4M16 8l4 4-4 4M20 12H9" />,
   chevron: <path d="m6 9 6 6 6-6" />,
   link: <path d="M10 13.5a4.5 4.5 0 0 0 6.8.5l2.7-2.7a4.5 4.5 0 0 0-6.4-6.4L11.6 6.4M14 10.5a4.5 4.5 0 0 0-6.8-.5l-2.7 2.7a4.5 4.5 0 0 0 6.4 6.4l1.5-1.5" />,
   chart: <path d="M4 20V11M10 20V5M16 20v-6M2 20h20" />,

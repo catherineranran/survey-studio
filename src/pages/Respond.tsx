@@ -15,10 +15,12 @@ import {
   pipeUrl,
   randomSeed,
   remainingPages,
+  stepAtBlock,
   validateAnswer,
   visibleQuestions,
   type AssignmentCounts,
   type Ctx,
+  type ForcedArms,
   type Plan,
   type Position,
 } from '../lib/engine';
@@ -43,6 +45,8 @@ interface Runtime {
   history: Position[];
   startedAt: string;
   pageTimes: Record<string, number>;
+  /** Preview started at a block: it is shown whatever its display logic says. */
+  forceVisible?: string[];
 }
 
 interface SavedProgress extends Runtime {
@@ -90,13 +94,24 @@ function browserLang(): Lang {
   return typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('de') ? 'de' : 'en';
 }
 
+/** Testing tools of the preview window. Read when the run starts, except skipRequired. */
+export interface PreviewOptions {
+  /** Start on this block's first page, as if arriving there (no earlier answers). */
+  startBlockId?: string;
+  /** Give these randomizer branches instead of drawing them. */
+  forced?: ForcedArms;
+  /** Let the tester go on without answering required questions. */
+  skipRequired?: boolean;
+}
+
 export interface RespondProps {
   surveyId: string;
   /** Builder preview: run this draft instead of the published version, and flag the response as a test. */
   previewSurvey?: Survey;
+  previewOptions?: PreviewOptions;
 }
 
-export function Respond({ surveyId, previewSurvey }: RespondProps) {
+export function Respond({ surveyId, previewSurvey, previewOptions }: RespondProps) {
   const preview = !!previewSurvey;
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [rt, setRt] = useState<Runtime | null>(null);
@@ -161,8 +176,9 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
           }
         }
 
-        // URL parameters (e.g. ?PROLIFIC_PID=...) become part of the response.
-        const params = urlParams();
+        // URL parameters (e.g. ?PROLIFIC_PID=...) become part of the response. The
+        // preview window's own address isn't a respondent link, so it has none.
+        const params = preview ? new URLSearchParams() : urlParams();
         const embedded: Record<string, string> = {};
         const missing: string[] = [];
         for (const p of survey.urlParams) {
@@ -180,10 +196,12 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
           }
         }
         if (cancelled) return;
-        const plan = makePlan(survey, randomSeed(), counts);
+        const plan = makePlan(survey, randomSeed(), counts, preview ? previewOptions?.forced : undefined);
         Object.assign(embedded, plan.assignments);
-        const ctx: Ctx = { index: indexSurvey(survey), answers: {}, otherText: {}, embedded };
-        const first = firstStep(plan, ctx);
+        const startId = preview && survey.blocks.some((b) => b.id === previewOptions?.startBlockId) ? previewOptions!.startBlockId! : undefined;
+        const forceVisible = startId ? [startId] : undefined;
+        const ctx: Ctx = { index: indexSurvey(survey), answers: {}, otherText: {}, embedded, lang: survey.settings.language, forceVisible };
+        const first = (startId && stepAtBlock(plan, ctx, startId)) || firstStep(plan, ctx);
         setRt({
           survey,
           plan,
@@ -194,8 +212,9 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
           history: first.kind === 'page' ? [first.pos] : [],
           startedAt: new Date().toISOString(),
           pageTimes: {},
+          forceVisible,
         });
-        setPhase(survey.settings.welcomeEnabled ? { kind: 'welcome' } : { kind: 'page' });
+        setPhase(survey.settings.welcomeEnabled && !startId ? { kind: 'welcome' } : { kind: 'page' });
         enteredAt.current = Date.now();
       } catch (e) {
         if (!cancelled) setPhase({ kind: 'blocked', reason: 'notFound', message: e instanceof Error ? e.message : undefined });
@@ -211,7 +230,10 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
   // Raw answers keep what people typed (shown in the inputs); `ectx` holds only answers that
   // still apply on the current path, and is what logic, piping and navigation use.
   const ctx: Ctx | null = useMemo(
-    () => (rt && index ? { index, answers: rt.answers, otherText: rt.otherText, embedded: rt.embedded, lang: rt.survey.settings.language } : null),
+    () =>
+      rt && index
+        ? { index, answers: rt.answers, otherText: rt.otherText, embedded: rt.embedded, lang: rt.survey.settings.language, forceVisible: rt.forceVisible }
+        : null,
     [rt, index],
   );
   const ectx: Ctx | null = useMemo(() => (rt && ctx ? effectiveCtx(rt.plan, ctx, rt.history) : null), [rt, ctx]);
@@ -320,7 +342,7 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
     );
     const errs: Record<string, string> = {};
     for (const q of declined ? [] : questions) {
-      const e = validateAnswer(q, rt.answers[q.id], rt.otherText[q.id], lang);
+      const e = validateAnswer(q, rt.answers[q.id], rt.otherText[q.id], lang, { skipRequired: preview && previewOptions?.skipRequired });
       if (e) errs[q.id] = e;
     }
     if (Object.keys(errs).length) {
@@ -463,6 +485,7 @@ export function Respond({ surveyId, previewSurvey }: RespondProps) {
               next();
             }}
           >
+            {preview && !questions.length && <p className="preview-empty">Preview: nothing on this page is shown with the answers given so far.</p>}
             {showSummary && Object.keys(errors).length > 0 && (
               <div className="error-summary" role="alert">
                 <Icon name="warning" size={18} />

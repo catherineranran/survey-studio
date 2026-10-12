@@ -1,8 +1,11 @@
-import { AutoTextarea, Button, Field, IconButton, NumberInput, Toggle } from '../../components/ui';
+import { useState } from 'react';
+import { AutoTextarea, Button, Dialog, Field, IconButton, NumberInput, Toggle } from '../../components/ui';
 import { allQuestions } from '../../lib/engine';
+import { describeTarget, placeOf, skipTargets } from '../../lib/flow';
 import { uid, variableError } from '../../lib/ids';
 import { TYPE_GROUPS, TYPE_INFO, convertQuestion } from '../../lib/questionTypes';
-import type { Block, Branch, Question, Survey } from '../../lib/types';
+import { questionLabel } from '../../lib/lint';
+import type { Block, Branch, Logic, Question, Survey } from '../../lib/types';
 import type { Updater } from '../../lib/useUndoable';
 import { LogicEditor, describeLogic, logicSources } from './LogicEditor';
 import type { QMutate } from './QuestionEditor';
@@ -17,6 +20,7 @@ export function QuestionInspector({
   onDuplicate,
   onDelete,
   onMoveToBlock,
+  onApplyLogic,
 }: {
   survey: Survey;
   q: Question;
@@ -25,7 +29,10 @@ export function QuestionInspector({
   onDuplicate: () => void;
   onDelete: () => void;
   onMoveToBlock: (blockId: string) => void;
+  /** Gives other questions a copy of this display logic. */
+  onApplyLogic?: (questionIds: string[], logic: Logic) => void;
 }) {
+  const [copying, setCopying] = useState(false);
   const info = TYPE_INFO[q.type];
   const v = q.validation ?? {};
   const setV = (patch: Partial<NonNullable<Question['validation']>>, key?: string) => change((x) => void (x.validation = { ...x.validation, ...patch }), key);
@@ -73,6 +80,23 @@ export function QuestionInspector({
           sources={logicSources(survey, { beforeQuestion: q.id })}
           emptyText="Always shown. Add a condition to show this question only to some respondents."
         />
+        {onApplyLogic && q.displayLogic?.conditions.length ? (
+          <Button size="sm" variant="quiet" icon="copy" onClick={() => setCopying(true)}>
+            Use this logic on other questions
+          </Button>
+        ) : null}
+        {copying && q.displayLogic && onApplyLogic && (
+          <CopyLogicDialog
+            survey={survey}
+            source={q}
+            logic={q.displayLogic}
+            onClose={() => setCopying(false)}
+            onApply={(ids) => {
+              onApplyLogic(ids, q.displayLogic!);
+              setCopying(false);
+            }}
+          />
+        )}
       </section>
 
       <section className="insp-section">
@@ -239,9 +263,8 @@ export function BlockInspector({ survey, block, update }: { survey: Survey; bloc
       },
       { coalesce: coalesce ? `${block.id}:${coalesce}` : undefined },
     );
-  const index = survey.blocks.findIndex((b) => b.id === block.id);
-  const later = survey.blocks.slice(index + 1);
-  const randomizer = survey.randomizers.find((r) => r.blockIds.includes(block.id));
+  const later = skipTargets(survey, block.id);
+  const place = placeOf(survey, block.id);
   const sources = logicSources(survey, { uptoBlock: block.id });
 
   const setBranch = (id: string, patch: Partial<Branch>) => change((b) => void (b.branches = b.branches.map((br) => (br.id === id ? { ...br, ...patch } : br))));
@@ -264,9 +287,9 @@ export function BlockInspector({ survey, block, update }: { survey: Survey; bloc
           checked={!!block.randomizeQuestions}
           onChange={(on) => change((b) => void (b.randomizeQuestions = on))}
         />
-        {randomizer && (
+        {place && (
           <p className="hint">
-            Part of randomizer <span className="mono">{randomizer.variable}</span>. Edit it in the Flow tab.
+            Branch “{place.arm.label}” of randomizer <span className="mono">{place.randomizer.variable}</span>. Arrange branches in the Flow tab.
           </p>
         )}
       </section>
@@ -312,9 +335,12 @@ export function BlockInspector({ survey, block, update }: { survey: Survey; bloc
             />
             <Field label="Then go to">
               <select className="input" value={br.target} onChange={(e) => setBranch(br.id, { target: e.target.value })}>
-                {later.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    Block: {b.title}
+                {br.target !== 'end' && !later.some((t) => t.id === br.target) && (
+                  <option value={br.target}>{survey.blocks.some((b) => b.id === br.target) ? `Block: ${survey.blocks.find((b) => b.id === br.target)!.title}` : 'A deleted block'}</option>
+                )}
+                {later.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
                   </option>
                 ))}
                 <option value="end">End of survey</option>
@@ -334,7 +360,7 @@ export function BlockInspector({ survey, block, update }: { survey: Survey; bloc
               </>
             )}
             <p className="hint branch-summary">
-              If {describeLogic(br.logic, survey)}, go to {br.target === 'end' ? `the end (${br.endTag || 'complete'})` : `“${survey.blocks.find((b) => b.id === br.target)?.title ?? 'a missing block'}”`}.
+              If {describeLogic(br.logic, survey)}, go to {br.target === 'end' ? `the end (${br.endTag || 'complete'})` : describeTarget(survey, block.id, br.target)}.
             </p>
           </div>
         ))}
@@ -403,5 +429,78 @@ export function SurveyOverview({ survey }: { survey: Survey }) {
         </ul>
       </section>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------ copy logic */
+
+function CopyLogicDialog({
+  survey,
+  source,
+  logic,
+  onClose,
+  onApply,
+}: {
+  survey: Survey;
+  source: Question;
+  logic: Logic;
+  onClose: () => void;
+  onApply: (questionIds: string[]) => void;
+}) {
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const questions = allQuestions(survey);
+  const position = new Map(questions.map((x, i) => [x.id, i]));
+  // A question can only use answers given before it.
+  const latestSource = Math.max(-1, ...logic.conditions.map((c) => position.get(c.source) ?? -1));
+  const toggle = (id: string) =>
+    setPicked((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Use this logic on other questions"
+      wide
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" disabled={!picked.size} onClick={() => onApply([...picked])}>
+            {picked.size ? `Apply to ${picked.size} question${picked.size === 1 ? '' : 's'}` : 'Apply'}
+          </Button>
+        </>
+      }
+    >
+      <p className="hint">
+        Show these questions only if {describeLogic(logic, survey)}. Questions that already have display logic get this logic instead.
+      </p>
+      <div className="copy-logic-list">
+        {survey.blocks.map((b) => {
+          const qs = b.questions.filter((x) => x.id !== source.id);
+          if (!qs.length) return null;
+          return (
+            <fieldset key={b.id} className="checks">
+              <legend className="field-label">{b.title || 'Untitled block'}</legend>
+              {qs.map((x) => {
+                const tooEarly = (position.get(x.id) ?? 0) <= latestSource;
+                return (
+                  <label key={x.id} className={`check ${tooEarly ? 'is-disabled' : ''}`}>
+                    <input type="checkbox" disabled={tooEarly} checked={picked.has(x.id)} onChange={() => toggle(x.id)} />
+                    <span className="mono copy-logic-var">{x.variable || 'Text'}</span>
+                    <span className="copy-logic-text">{questionLabel(x)}</span>
+                    {tooEarly ? <span className="hint">comes before a question this logic uses</span> : x.displayLogic?.conditions.length ? <span className="tag">has logic</span> : null}
+                  </label>
+                );
+              })}
+            </fieldset>
+          );
+        })}
+      </div>
+    </Dialog>
   );
 }

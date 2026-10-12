@@ -16,3 +16,60 @@ export function plainText(text: string | undefined): string {
     return part;
   });
 }
+
+/** What an image mark ![description](https://…) shows. */
+export type Media =
+  | { kind: 'image'; src: string }
+  | { kind: 'video'; src: string }
+  | { kind: 'player'; src: string; provider: 'YouTube' | 'Vimeo' | 'Google Drive' };
+
+/** "90", "90s", "1m30s" -> seconds. */
+function seconds(t: string | null): number {
+  if (!t) return 0;
+  if (/^\d+$/.test(t)) return Number(t);
+  const m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(t);
+  return m ? Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0) : 0;
+}
+
+/**
+ * Images, video files (.mp4, .webm, .mov …) and videos on YouTube, Vimeo or Google Drive
+ * all use the image mark. Only https links are shown. YouTube plays from its no-cookie
+ * domain and Vimeo with "do not track"; a video file on your own server avoids third parties.
+ */
+export function mediaFor(url: string): Media | null {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== 'https:') return null;
+  const host = u.hostname.toLowerCase().replace(/^(www\.|m\.)/, '');
+
+  let yt: string | null = null;
+  if (host === 'youtu.be') yt = u.pathname.split('/')[1] ?? null;
+  else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+    if (u.pathname === '/watch') yt = u.searchParams.get('v');
+    else yt = /^\/(?:embed|shorts|live)\/([^/]+)/.exec(u.pathname)?.[1] ?? null;
+  }
+  if (yt && /^[\w-]{6,20}$/.test(yt)) {
+    const start = seconds(u.searchParams.get('t') ?? u.searchParams.get('start'));
+    return { kind: 'player', provider: 'YouTube', src: `https://www.youtube-nocookie.com/embed/${yt}?rel=0${start ? `&start=${start}` : ''}` };
+  }
+
+  if (host === 'vimeo.com' || host === 'player.vimeo.com') {
+    const m = /^\/(?:video\/)?(\d+)(?:\/([0-9a-f]+))?/.exec(u.pathname);
+    if (m) {
+      const h = m[2] ?? u.searchParams.get('h');
+      return { kind: 'player', provider: 'Vimeo', src: `https://player.vimeo.com/video/${m[1]}?dnt=1${h && /^[0-9a-f]+$/.test(h) ? `&h=${h}` : ''}` };
+    }
+  }
+
+  if (host === 'drive.google.com') {
+    const id = /^\/file\/d\/([\w-]+)/.exec(u.pathname)?.[1] ?? (u.pathname === '/open' ? u.searchParams.get('id') : null);
+    if (id && /^[\w-]+$/.test(id)) return { kind: 'player', provider: 'Google Drive', src: `https://drive.google.com/file/d/${id}/preview` };
+  }
+
+  if (/\.(mp4|m4v|webm|ogv|mov)$/i.test(u.pathname)) return { kind: 'video', src: u.href };
+  return { kind: 'image', src: u.href };
+}

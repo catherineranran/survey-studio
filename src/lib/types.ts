@@ -147,15 +147,26 @@ export interface Block {
   questions: Question[];
 }
 
+/** One branch of a randomizer: a label for the data and the blocks shown, in order. */
+export interface RandomizerArm {
+  id: string;
+  /** Recorded in the data when a respondent gets this branch, e.g. "AI-generated video". */
+  label: string;
+  /** Blocks shown one after another. Empty is allowed (a "nothing shown" control). */
+  blockIds: string[];
+}
+
 export interface Randomizer {
   id: string;
-  /** Name of the field that stores which block(s) a respondent saw, e.g. "condition". */
+  /** Name of the field that stores which branch(es) a respondent got, e.g. "condition". */
   variable: string;
-  blockIds: string[];
-  /** How many of the blocks each respondent sees. 1 = classic between-subjects assignment. */
+  arms: RandomizerArm[];
+  /** How many branches each respondent gets. 1 = classic between-subjects assignment. */
   present: number;
-  /** Give the least-used option to the next respondent, keeping groups even. */
+  /** Give the least-used branch to the next respondent, keeping groups even. */
   balance: boolean;
+  /** Older survey files listed single blocks here; normalizeSurvey turns them into arms. */
+  blockIds?: string[];
 }
 
 export interface UrlParam {

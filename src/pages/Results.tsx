@@ -16,7 +16,7 @@ import {
 import { questionLabel } from '../lib/lint';
 import { TYPE_INFO } from '../lib/questionTypes';
 import { median, summarize, type CountRow, type NumericStats, type Summary } from '../lib/stats';
-import type { Question, Survey, SurveyResponse } from '../lib/types';
+import type { Question, Randomizer, Survey, SurveyResponse } from '../lib/types';
 
 type View = 'summary' | 'responses' | 'export';
 
@@ -26,6 +26,8 @@ export function Results({ backend, surveyId, survey }: { backend: Backend; surve
   const [view, setView] = useState<View>('summary');
   const [includePreview, setIncludePreview] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'complete' | 'other'>('all');
+  // "<randomizer field>\n<branch name>", or '' for everyone.
+  const [branch, setBranch] = useState('');
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -43,8 +45,12 @@ export function Results({ backend, surveyId, survey }: { backend: Backend; surve
     if (!includePreview) list = list.filter((r) => !r.meta?.preview);
     if (statusFilter === 'complete') list = list.filter((r) => (r.meta?.status ?? 'complete') === 'complete');
     if (statusFilter === 'other') list = list.filter((r) => (r.meta?.status ?? 'complete') !== 'complete');
+    if (branch) {
+      const [field, label] = branch.split('\n');
+      list = list.filter((r) => (r.embedded?.[field] ?? '').split('|').includes(label));
+    }
     return list;
-  }, [all, includePreview, statusFilter]);
+  }, [all, includePreview, statusFilter, branch]);
 
   const previews = (all ?? []).filter((r) => r.meta?.preview).length;
   const live = (all ?? []).filter((r) => !r.meta?.preview);
@@ -105,6 +111,20 @@ export function Results({ backend, surveyId, survey }: { backend: Backend; surve
             <option value="complete">Completed only</option>
             <option value="other">Ended early only</option>
           </select>
+          {survey.randomizers.length > 0 && (
+            <select className="input input-sm" value={branch} onChange={(e) => setBranch(e.target.value)} aria-label="Filter by randomizer branch">
+              <option value="">All branches</option>
+              {survey.randomizers.map((r) => (
+                <optgroup key={r.id} label={r.variable}>
+                  {r.arms.map((a) => (
+                    <option key={a.id} value={`${r.variable}\n${a.label}`}>
+                      {a.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          )}
           <Toggle label={`Include test responses (${previews})`} checked={includePreview} onChange={setIncludePreview} />
           <IconButton icon="undo" label="Reload responses" onClick={load} />
           {previews > 0 && (
@@ -125,6 +145,9 @@ export function Results({ backend, surveyId, survey }: { backend: Backend; surve
           </Empty>
         ) : (
           <div className="summary-list">
+            {survey.randomizers.map((r) => (
+              <AssignmentSummary key={r.id} r={r} responses={responses} />
+            ))}
             {allQuestions(survey)
               .filter((q) => TYPE_INFO[q.type].answerable)
               .map((q) => (
@@ -161,6 +184,32 @@ function QuestionSummary({ q, responses }: { q: Question; responses: SurveyRespo
         </span>
       </header>
       <SummaryBody s={s} q={q} />
+    </section>
+  );
+}
+
+/** How many respondents got each branch of a randomizer. */
+function AssignmentSummary({ r, responses }: { r: Randomizer; responses: SurveyResponse[] }) {
+  const counts = new Map<string, number>(r.arms.map((a) => [a.label, 0]));
+  let assigned = 0;
+  for (const resp of responses) {
+    const value = resp.embedded?.[r.variable];
+    if (!value) continue;
+    assigned++;
+    // Values recorded under an earlier branch name still show up, as their own row.
+    for (const label of value.split('|')) counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  const rows: CountRow[] = [...counts].map(([label, n]) => ({ id: label, label, code: label, n, pct: assigned ? (n / assigned) * 100 : 0 }));
+  return (
+    <section className="summary-card">
+      <header className="summary-head">
+        <span className="var-chip">{r.variable}</span>
+        <h3>Random assignment</h3>
+        <span className="hint summary-n">
+          {assigned} of {responses.length} assigned
+        </span>
+      </header>
+      <Bars rows={rows} total={assigned} />
     </section>
   );
 }

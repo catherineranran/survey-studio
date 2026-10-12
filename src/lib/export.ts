@@ -184,8 +184,17 @@ export function buildColumns(survey: Survey, opts: Pick<ExportOptions, 'values' 
   ];
   if (opts.includePreview) cols.push({ name: 'preview', label: 'Test response from preview', type: 'System', values: [{ code: 1, label: 'Preview' }, { code: 0, label: 'Live' }], get: (r) => (r.meta?.preview ? 1 : 0) });
   for (const p of survey.urlParams) cols.push({ name: p.name, label: `URL parameter ${p.name}`, type: 'URL parameter', get: (r) => r.embedded?.[p.name] ?? null });
-  for (const z of survey.randomizers)
-    cols.push({ name: z.variable, label: 'Randomizer: block(s) shown', type: 'Randomizer', notes: 'Block titles, separated by "|"', get: (r) => r.embedded?.[z.variable] ?? null });
+  for (const z of survey.randomizers) {
+    const names = z.arms.map((a) => `"${a.label}"`).join(', ');
+    const several = z.present > 1 ? '; respondents got several, separated by "|" in the order shown' : '';
+    cols.push({
+      name: z.variable,
+      label: z.present > 1 ? 'Randomizer: branches given' : 'Randomizer: branch given',
+      type: 'Randomizer',
+      notes: `One of ${names}${several}`,
+      get: (r) => r.embedded?.[z.variable] ?? null,
+    });
+  }
   for (const q of allQuestions(survey)) cols.push(...questionColumns(q, opts.values));
   if (opts.includeTimings) {
     for (const b of survey.blocks) {
