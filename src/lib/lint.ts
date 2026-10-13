@@ -1,5 +1,6 @@
 // The survey checker: catches problems before respondents (or your data) do.
 
+import { READABLE, accentContrast, textContrast } from './appearance';
 import { allQuestions } from './engine';
 import { buildColumns } from './export';
 import { placeOf } from './flow';
@@ -27,6 +28,14 @@ export function lintSurvey(s: Survey): Issue[] {
 
   if (!questions.some((q) => TYPE_INFO[q.type].answerable)) err('Add at least one question respondents can answer.');
 
+  // Appearance: colours people can read.
+  const textRatio = textContrast(s.settings);
+  if (textRatio < READABLE)
+    warn(`The text colour is hard to read on the white page (contrast ${textRatio.toFixed(1)} : 1). Choose a darker one in Settings, Appearance.`);
+  const accentRatio = accentContrast(s.settings);
+  if (accentRatio < READABLE)
+    warn(`White text on the accent colour is hard to read (contrast ${accentRatio.toFixed(1)} : 1). Choose a darker accent in Settings, Appearance.`);
+
   // Variable names
   const names = new Map<string, string>();
   const claim = (name: string, owner: string, where: Partial<Issue>) => {
@@ -53,6 +62,7 @@ export function lintSurvey(s: Survey): Issue[] {
 
   // Questions
   for (const q of questions) {
+    if (q.type === 'page_break') continue;
     const where = { questionId: q.id };
     const label = q.variable || 'A text block';
     if (!q.title.trim() && q.type !== 'text_block') warn(`${label} has no question text.`, where);
@@ -107,10 +117,19 @@ export function lintSurvey(s: Survey): Issue[] {
   // Blocks
   for (const b of s.blocks) {
     const where = { blockId: b.id };
-    if (!b.questions.length) warn(`Block “${b.title}” is empty.`, where);
+    if (!b.questions.some((q) => q.type !== 'page_break')) warn(`Block “${b.title}” is empty.`, where);
     const consent = b.questions.find((q) => q.type === 'consent');
-    if (consent && b.pageMode === 'single' && b.questions.some((q) => q !== consent && TYPE_INFO[q.type].answerable))
-      warn(`Block “${b.title}” asks for consent on the same page as other questions. Put consent in its own block so people see the questions only after agreeing.`, where);
+    if (consent && b.pageMode === 'single') {
+      // Consent's page: the questions between the page breaks around it (shuffling can bring in any of the block's).
+      const at = b.questions.indexOf(consent);
+      let from = at;
+      while (from > 0 && b.questions[from - 1].type !== 'page_break') from--;
+      let to = at;
+      while (to < b.questions.length - 1 && b.questions[to + 1].type !== 'page_break') to++;
+      const page = b.randomizeQuestions ? b.questions : b.questions.slice(from, to + 1);
+      if (page.some((q) => q !== consent && TYPE_INFO[q.type].answerable))
+        warn(`Block “${b.title}” asks for consent on the same page as other questions. Put consent in its own block (or after a page break) so people see the questions only after agreeing.`, where);
+    }
     if (b.randomizeQuestions) {
       const inBlock = new Set(b.questions.map((q) => q.id));
       if (b.questions.some((q) => q.displayLogic?.conditions.some((c) => inBlock.has(c.source))))

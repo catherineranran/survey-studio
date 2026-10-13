@@ -34,6 +34,9 @@ export function QuestionView(props: QuestionViewProps) {
   const ids = { title: `${base}-t`, desc: `${base}-d`, err: `${base}-e` };
   const describedBy = [q.description ? ids.desc : '', error ? ids.err : ''].filter(Boolean).join(' ') || undefined;
 
+  // Page breaks only shape pages; the builder draws them itself.
+  if (q.type === 'page_break') return null;
+
   if (q.type === 'text_block') {
     return (
       <div className="qv qv-text_block" data-qid={q.id}>

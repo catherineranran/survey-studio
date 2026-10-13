@@ -19,7 +19,7 @@ export function logicSources(survey: Survey, opts: { beforeQuestion?: string; up
     if (opts.beforeBlock && b.id === opts.beforeBlock) break;
     for (const q of b.questions) {
       if (opts.beforeQuestion && q.id === opts.beforeQuestion) break outer;
-      if (q.type === 'text_block') continue;
+      if (q.type === 'text_block' || q.type === 'page_break') continue;
       out.push({ value: q.id, label: `${q.variable}: ${questionLabel(q)}`, q });
     }
     if (opts.uptoBlock && b.id === opts.uptoBlock) break;

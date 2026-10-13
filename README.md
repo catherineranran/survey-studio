@@ -10,11 +10,13 @@ It is a static web app. Run it on your laptop, host it free on GitHub Pages, and
 - 15 question types: multiple choice, checkboxes, dropdown, rank order, rating scale (numbered bubbles or stars), matrix / Likert table, slider, Net Promoter Score, short text, paragraph, number, date, consent, constant sum, and text blocks for instructions or vignettes
 - Images and videos in any text: a video file (.mp4, .webm), or a YouTube, Vimeo or Google Drive link
 - Video questions: an ordinary video, or a magic window into 140°, 180° or 360° footage that respondents look around in (drag, arrow keys, or moving the phone). They can be required to watch to the end, and the data records seconds played, whether it reached the end, and where people looked each second
-- Blocks and pages: all questions of a block on one page, or one per page
+- Blocks and pages: all questions of a block on one page, one per page, or split wherever you add a page break (page breaks stay put when questions are shuffled)
+- Forced response or optional for a whole block at once; new questions follow the block, and single questions can still differ
 - Likert presets in English and German (agreement, frequency, satisfaction, importance, likelihood, quality)
 - Option lists you can paste into: paste ten lines, get ten options. Enter adds a row, Backspace on an empty row removes it
 - Every option has an export code, every question a variable name, so the data file is analysis-ready
 - Undo / redo, autosave, duplicate questions and blocks, drag to reorder
+- Text size and text colour for respondent pages, besides the accent colour, with a live sample and a warning when a colour is hard to read
 - An outline at the left of the builder: blocks in survey order (randomizer branches side by side) and their questions, marking where you are; click to jump. Fold any block to a one-line summary, or fold them all, to move around long surveys (remembered per survey in your browser)
 - A survey checker that catches broken logic, duplicate variable names and other problems before you publish
 
@@ -22,7 +24,7 @@ It is a static web app. Run it on your laptop, host it free on GitHub Pages, and
 - Display logic on questions and blocks (all / any conditions, on answers, URL parameters or assigned conditions)
 - Skip logic after each block: jump forward or end the survey with a status like `screened_out`, an optional message and an optional redirect
 - Consent questions that end the survey when declined (status `declined_consent`)
-- A flowchart of the survey (Flow tab), like Qualtrics' survey flow: drag blocks into sequence, or onto each other to randomize between them
+- A flowchart of the survey (Flow tab), like Qualtrics' survey flow: drag blocks into sequence, or onto each other to randomize between them. Download it as a PNG image for a paper, preregistration or ethics application
 - Randomizers with named branches: each respondent gets one branch (or several, in random order), optionally balanced so groups stay even. A branch can hold several blocks in a row, or none (a control group), and everyone continues with the same steps afterwards
 - Shuffle option order (keeping "Other" and "None of these" last), statement order and question order
 - Piping: `{{age}}`, `{{condition}}`, `{{PROLIFIC_PID}}`, `{{response_id}}` in question text, messages and redirect links

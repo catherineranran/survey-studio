@@ -193,6 +193,51 @@ describe('navigation', () => {
     expect(remainingPages(plan, ctx, { block: 0, page: 0 })).toBe(1);
   });
 
+  it('page breaks split a block into pages, and every page is visited in order', () => {
+    const s = blankSurvey('s');
+    const b = s.blocks[0];
+    const [q1] = b.questions;
+    const q2 = createQuestion('short_text', s);
+    const q3 = createQuestion('short_text', s);
+    b.questions.push(createQuestion('page_break', s), q2, createQuestion('page_break', s), createQuestion('page_break', s), q3, createQuestion('page_break', s));
+    const plan = makePlan(s, 1);
+    const pages = pagesForBlock(b, plan);
+    // Two breaks in a row and a break at the end add no empty pages.
+    expect(pages.map((p) => p.questionIds)).toEqual([[q1.id], [q2.id], [q3.id]]);
+    expect(pages[0].key).toBe(b.id);
+    expect(pages.slice(1).every((p) => p.key.startsWith(`${b.id}:`))).toBe(true);
+    const ctx = makeCtx(s);
+    let step = firstStep(plan, ctx);
+    const seen: number[] = [];
+    while (step.kind === 'page') {
+      seen.push(step.pos.page);
+      step = nextStep(plan, ctx, step.pos);
+    }
+    expect(seen).toEqual([0, 1, 2]);
+    expect(remainingPages(plan, ctx, { block: 0, page: 0 })).toBe(2);
+  });
+
+  it('page breaks stay in place when questions are shuffled, and mean nothing with one question per page', () => {
+    const s = blankSurvey('s');
+    const b = s.blocks[0];
+    b.questions = [];
+    for (let i = 0; i < 6; i++) {
+      if (i === 3) b.questions.push(createQuestion('page_break', s));
+      b.questions.push(createQuestion('short_text', s));
+    }
+    b.randomizeQuestions = true;
+    const breakAt = b.questions.findIndex((q) => q.type === 'page_break');
+    for (let seed = 1; seed < 30; seed++) {
+      const plan = makePlan(s, seed);
+      expect(plan.questionOrder[b.id][breakAt]).toBe(b.questions[breakAt].id);
+      expect(pagesForBlock(b, plan).map((p) => p.questionIds.length)).toEqual([3, 3]);
+    }
+    b.pageMode = 'each';
+    const pages = pagesForBlock(b, makePlan(s, 1));
+    expect(pages).toHaveLength(6);
+    expect(pages.every((p) => p.questionIds.every((id) => id !== b.questions[breakAt].id))).toBe(true);
+  });
+
   it('shows follow-up questions depending on an NPS score', () => {
     const s = build('feedback');
     const nps = qByVar(s, 'nps');

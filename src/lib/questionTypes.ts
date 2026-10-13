@@ -5,7 +5,7 @@ export interface TypeInfo {
   type: QuestionType;
   label: string;
   hint: string;
-  group: 'Choice' | 'Scales' | 'Text and numbers' | 'Research';
+  group: 'Choice' | 'Scales' | 'Text and numbers' | 'Research' | 'Layout';
   /** Uses the `choices` list. */
   choices: boolean;
   /** Produces data (text blocks don't). */
@@ -29,6 +29,7 @@ export const TYPE_INFO: Record<QuestionType, TypeInfo> = {
   constant_sum: { type: 'constant_sum', label: 'Constant sum', hint: 'Split a total (e.g. 100) across options', group: 'Research', choices: true, answerable: true },
   text_block: { type: 'text_block', label: 'Text', hint: 'Instructions, vignettes, headings', group: 'Research', choices: false, answerable: false },
   video: { type: 'video', label: 'Video', hint: 'A video, or a magic window to look around in; records viewing', group: 'Research', choices: false, answerable: true },
+  page_break: { type: 'page_break', label: 'Page break', hint: 'The questions after it start a new page', group: 'Layout', choices: false, answerable: false },
 };
 
 export const TYPE_GROUPS: { name: TypeInfo['group']; types: QuestionType[] }[] = [
@@ -36,6 +37,7 @@ export const TYPE_GROUPS: { name: TypeInfo['group']; types: QuestionType[] }[] =
   { name: 'Scales', types: ['rating_scale', 'matrix', 'slider', 'nps'] },
   { name: 'Text and numbers', types: ['short_text', 'long_text', 'number', 'date'] },
   { name: 'Research', types: ['consent', 'constant_sum', 'text_block', 'video'] },
+  { name: 'Layout', types: ['page_break'] },
 ];
 
 export interface ScalePreset {
@@ -157,7 +159,7 @@ export function createQuestion(type: QuestionType, survey: Survey): Question {
   const base: Question = {
     id: uid('q'),
     type,
-    variable: type === 'text_block' ? '' : nextVariable(survey),
+    variable: TYPE_INFO[type].answerable ? nextVariable(survey) : '',
     title: t.question,
     required: false,
     displayLogic: null,
@@ -210,6 +212,8 @@ export function createQuestion(type: QuestionType, survey: Survey): Question {
     case 'video':
       // Required: respondents continue once they've watched it to the end.
       return { ...base, title: t.videoTitle, required: true, video: { src: '', view: 'wrap', span: 180, fov: 90, tilt: false } };
+    case 'page_break':
+      return { ...base, title: '' };
   }
 }
 
@@ -220,10 +224,10 @@ export function convertQuestion(q: Question, type: QuestionType, survey: Survey)
   const next: Question = {
     ...fresh,
     id: q.id,
-    variable: type === 'text_block' ? '' : q.variable || fresh.variable,
+    variable: TYPE_INFO[type].answerable ? q.variable || fresh.variable : '',
     title: q.title,
     description: q.description,
-    required: type === 'text_block' ? false : type === 'consent' ? true : q.required,
+    required: !TYPE_INFO[type].answerable ? false : type === 'consent' ? true : q.required,
     displayLogic: q.displayLogic ?? null,
   };
   const choiceTypes: QuestionType[] = ['single_choice', 'multi_choice', 'dropdown', 'rank', 'constant_sum'];
@@ -262,7 +266,7 @@ export function convertQuestion(q: Question, type: QuestionType, survey: Survey)
 export function cloneQuestion(q: Question, survey: Survey): Question {
   const copy: Question = JSON.parse(JSON.stringify(q));
   copy.id = uid('q');
-  copy.variable = q.type === 'text_block' ? '' : nextVariable(survey);
+  copy.variable = TYPE_INFO[q.type].answerable ? nextVariable(survey) : '';
   const remap = (list?: Choice[], prefix = 'c') => list?.map((c) => ({ ...c, id: uid(prefix) }));
   copy.choices = remap(copy.choices);
   copy.rows = remap(copy.rows, 'r');

@@ -59,6 +59,7 @@ export function questionColumns(q: Question, mode: ValueMode): Column[] {
 
   switch (q.type) {
     case 'text_block':
+    case 'page_break':
       return [];
     case 'video': {
       const va = (r: SurveyResponse) => videoAnswer(a(r));

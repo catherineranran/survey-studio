@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { QuestionView } from '../../components/QuestionView';
 import { Button, Icon, IconButton, Menu, useConfirm, useMediaQuery } from '../../components/ui';
-import { blockContents, readFolded, readOutlineShown, writeFolded, writeOutlineShown } from '../../lib/builderView';
+import { blockContents, blockPages, blockResponses, followBlock, plural } from '../../lib/blocks';
+import { readFolded, readOutlineShown, writeFolded, writeOutlineShown } from '../../lib/builderView';
 import { canMoveBlock, describeTarget, insertBlockAfter, moveBlock as moveBlockInFlow, removeBlock } from '../../lib/flow';
 import { uid } from '../../lib/ids';
 import { TYPE_INFO, cloneQuestion, createQuestion } from '../../lib/questionTypes';
@@ -14,6 +15,12 @@ import { describeLogic } from './LogicEditor';
 import { Outline, type Selection } from './Outline';
 import { QuestionEditor, type QMutate } from './QuestionEditor';
 import { TypePicker } from './TypePicker';
+
+const RULE_LABEL = { forced: 'Forced response', optional: 'Optional' } as const;
+const RULE_HINT = {
+  forced: 'Respondents must answer every question in this block. Change it in the block settings.',
+  optional: 'Respondents can skip any question in this block. Change it in the block settings.',
+} as const;
 
 function locate(s: Survey, qid: string): { block: Block; index: number } | null {
   for (const block of s.blocks) {
@@ -219,7 +226,7 @@ export function Builder({ survey, surveyId, update, onPreview }: { survey: Surve
 
   const addQuestion = (type: QuestionType) => {
     if (!adding) return;
-    const q = createQuestion(type, survey);
+    const q = followBlock(createQuestion(type, survey), survey.blocks.find((x) => x.id === adding.blockId));
     update((s) => {
       const b = s.blocks.find((x) => x.id === adding.blockId) ?? s.blocks[s.blocks.length - 1];
       const after = adding.afterId ? b.questions.findIndex((x) => x.id === adding.afterId) : -1;
@@ -227,10 +234,31 @@ export function Builder({ survey, surveyId, update, onPreview }: { survey: Surve
       else b.questions.push(q);
     });
     setAdding(null);
+    if (type === 'page_break') {
+      requestAnimationFrame(() => document.getElementById(`q-${q.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+      return;
+    }
     selectQuestion(q.id, true);
     // After the picker closes (and hands focus back), put the cursor in the new question's text.
     setTimeout(() => document.querySelector<HTMLTextAreaElement>(`#q-${q.id} .qedit-title`)?.focus(), 80);
   };
+
+  const insertBreak = (blockId: string, afterId: string) => {
+    const pb = createQuestion('page_break', survey);
+    update((s) => {
+      const b = s.blocks.find((x) => x.id === blockId);
+      const at = b ? b.questions.findIndex((x) => x.id === afterId) : -1;
+      if (b && at >= 0) b.questions.splice(at + 1, 0, pb);
+    });
+    // The button that was pressed goes away (no breaks next to breaks); focus moves to the new break.
+    requestAnimationFrame(() => document.getElementById(`q-${pb.id}`)?.focus({ preventScroll: true }));
+  };
+  // Removing a page break leaves whatever is selected alone.
+  const removeBreak = (id: string) =>
+    update((s) => {
+      const at = locate(s, id);
+      at?.block.questions.splice(at.index, 1);
+    });
 
   const duplicateQ = (qid: string) => {
     const at = locate(survey, qid);
@@ -327,9 +355,10 @@ export function Builder({ survey, surveyId, update, onPreview }: { survey: Surve
 
   const deleteBlock = async (b: Block) => {
     if (survey.blocks.length === 1) return;
+    const items = b.questions.filter((q) => q.type !== 'page_break').length;
     const ok = await confirm({
       title: `Delete “${b.title}”?`,
-      message: b.questions.length ? `Its ${b.questions.length} question${b.questions.length === 1 ? '' : 's'} will be deleted too. You can undo this.` : 'You can undo this.',
+      message: items ? `Its ${items} question${items === 1 ? '' : 's'} will be deleted too. You can undo this.` : 'You can undo this.',
       confirmLabel: 'Delete block',
       danger: true,
     });
@@ -430,9 +459,12 @@ export function Builder({ survey, surveyId, update, onPreview }: { survey: Surve
           const isSel = sel?.kind === 'block' && sel.id === b.id;
           const isFolded = folded.has(b.id);
           const badges: string[] = [];
+          const pages = blockPages(b);
           if (b.pageMode === 'each') badges.push('One question per page');
+          else if (pages && pages > 1) badges.push(plural(pages, 'page', 'pages'));
           if (b.randomizeQuestions) badges.push('Shuffled');
           const rz = randomizerOf.get(b.id);
+          const rule = blockResponses(b);
           const vars = b.questions.map((q) => q.variable).filter(Boolean);
           return (
             <section
@@ -485,6 +517,11 @@ export function Builder({ survey, surveyId, update, onPreview }: { survey: Surve
                     </p>
                   )}
                   <div className="block-badges">
+                    {rule && (
+                      <span className={`badge badge-resp is-${rule}`} title={RULE_HINT[rule]}>
+                        {RULE_LABEL[rule]}
+                      </span>
+                    )}
                     {badges.map((x) => (
                       <span key={x} className="badge">
                         {x}
@@ -523,43 +560,109 @@ export function Builder({ survey, surveyId, update, onPreview }: { survey: Surve
                     {!b.questions.length && <p className="block-empty">No questions in this block yet.</p>}
                     {b.questions.map((q, qi) => {
                       const isQ = sel?.kind === 'question' && sel.id === q.id;
+                      const isBreak = q.type === 'page_break';
+                      const next = b.questions[qi + 1];
+                      // A page break only makes sense between two questions of a block shown all together.
+                      const canBreak = b.pageMode !== 'each' && !isBreak && !!next && next.type !== 'page_break';
+                      const first = bi === 0 && qi === 0;
+                      const last = bi === survey.blocks.length - 1 && qi === b.questions.length - 1;
+                      const dnd = {
+                        draggable: drag?.id === q.id,
+                        onDragStart: (e: React.DragEvent) => {
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData('text/plain', q.id);
+                        },
+                        onDragOver: (e: React.DragEvent) => {
+                          if (!drag) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (drag.over !== q.id) setDrag({ ...drag, over: q.id, overBlock: b.id });
+                        },
+                        onDrop: (e: React.DragEvent) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          dropOn(q.id, b.id);
+                        },
+                        onDragEnd: () => setDrag(null),
+                      };
+                      const grip = (
+                        <span className="grip" title="Drag to move" onPointerDown={() => setDrag({ id: q.id })} onPointerUp={() => setDrag((d) => (d && !d.over ? null : d))}>
+                          <Icon name="grip" size={16} />
+                        </span>
+                      );
+                      const insertRow = (
+                        <div className="insert-row">
+                          <button
+                            type="button"
+                            className="insert-here"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAdding({ blockId: b.id, afterId: q.id });
+                            }}
+                          >
+                            <Icon name="plus" size={14} />
+                            <span>Insert question here</span>
+                          </button>
+                          {canBreak && (
+                            <button
+                              type="button"
+                              className="insert-here"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                insertBreak(b.id, q.id);
+                              }}
+                            >
+                              <Icon name="pagebreak" size={14} />
+                              <span>Page break</span>
+                            </button>
+                          )}
+                        </div>
+                      );
+                      const dragClass = `${drag?.id === q.id ? 'is-dragging' : ''} ${drag?.over === q.id ? 'is-drop-before' : ''}`;
+                      if (isBreak)
+                        return (
+                          <article
+                            key={q.id}
+                            id={`q-${q.id}`}
+                            tabIndex={-1}
+                            aria-label="Page break"
+                            className={`qcard qcard-break ${dragClass}`}
+                            {...dnd}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {grip}
+                            <span className="break-rule" aria-hidden="true" />
+                            <span className="break-label">
+                              <Icon name="pagebreak" size={14} /> Page break
+                              {b.pageMode === 'each' ? (
+                                <span className="break-note"> · no effect while each question has its own page</span>
+                              ) : qi === 0 || !next || b.questions[qi - 1].type === 'page_break' ? (
+                                <span className="break-note"> · no effect here: it needs questions before and after it</span>
+                              ) : null}
+                            </span>
+                            <span className="break-rule" aria-hidden="true" />
+                            <span className="qcard-tools">
+                              <IconButton icon="up" size="sm" label="Move page break up" onClick={() => moveQ(q.id, -1)} disabled={first} />
+                              <IconButton icon="down" size="sm" label="Move page break down" onClick={() => moveQ(q.id, 1)} disabled={last} />
+                              <IconButton icon="trash" size="sm" label="Remove page break" onClick={() => removeBreak(q.id)} />
+                            </span>
+                            {insertRow}
+                          </article>
+                        );
                       return (
                         <article
                           key={q.id}
                           id={`q-${q.id}`}
                           tabIndex={isQ ? -1 : undefined}
-                          className={`qcard ${isQ ? 'is-selected' : ''} ${drag?.id === q.id ? 'is-dragging' : ''} ${drag?.over === q.id ? 'is-drop-before' : ''}`}
-                          draggable={drag?.id === q.id}
-                          onDragStart={(e) => {
-                            e.dataTransfer.effectAllowed = 'move';
-                            e.dataTransfer.setData('text/plain', q.id);
-                          }}
-                          onDragOver={(e) => {
-                            if (!drag) return;
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (drag.over !== q.id) setDrag({ ...drag, over: q.id, overBlock: b.id });
-                          }}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            dropOn(q.id, b.id);
-                          }}
-                          onDragEnd={() => setDrag(null)}
+                          className={`qcard ${isQ ? 'is-selected' : ''} ${dragClass}`}
+                          {...dnd}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!isQ) selectQuestion(q.id);
                           }}
                         >
                           <div className="qcard-meta">
-                            <span
-                              className="grip"
-                              title="Drag to move"
-                              onPointerDown={() => setDrag({ id: q.id })}
-                              onPointerUp={() => setDrag((d) => (d && !d.over ? null : d))}
-                            >
-                              <Icon name="grip" size={16} />
-                            </span>
+                            {grip}
                             {q.variable ? <span className="var-chip">{q.variable}</span> : null}
                             <span className="type-label">{TYPE_INFO[q.type].label}</span>
                             {q.required && <span className="req-chip">Required</span>}
@@ -569,14 +672,8 @@ export function Builder({ survey, surveyId, update, onPreview }: { survey: Surve
                               </span>
                             ) : null}
                             <span className="qcard-tools">
-                              <IconButton icon="up" size="sm" label="Move up" onClick={(e) => (e.stopPropagation(), moveQ(q.id, -1))} disabled={bi === 0 && qi === 0} />
-                              <IconButton
-                                icon="down"
-                                size="sm"
-                                label="Move down"
-                                onClick={(e) => (e.stopPropagation(), moveQ(q.id, 1))}
-                                disabled={bi === survey.blocks.length - 1 && qi === b.questions.length - 1}
-                              />
+                              <IconButton icon="up" size="sm" label="Move up" onClick={(e) => (e.stopPropagation(), moveQ(q.id, -1))} disabled={first} />
+                              <IconButton icon="down" size="sm" label="Move down" onClick={(e) => (e.stopPropagation(), moveQ(q.id, 1))} disabled={last} />
                               <IconButton icon="copy" size="sm" label="Duplicate" onClick={(e) => (e.stopPropagation(), duplicateQ(q.id))} />
                               <IconButton icon="trash" size="sm" label="Delete" onClick={(e) => (e.stopPropagation(), void deleteQ(q.id))} />
                             </span>
@@ -589,17 +686,7 @@ export function Builder({ survey, surveyId, update, onPreview }: { survey: Surve
                             </div>
                           )}
                           {isQ && !wide && <div className="inline-inspector">{inspector}</div>}
-                          <button
-                            type="button"
-                            className="insert-here"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setAdding({ blockId: b.id, afterId: q.id });
-                            }}
-                          >
-                            <Icon name="plus" size={14} />
-                            <span>Insert question here</span>
-                          </button>
+                          {insertRow}
                         </article>
                       );
                     })}

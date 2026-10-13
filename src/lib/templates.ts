@@ -33,6 +33,8 @@ export function defaultSettings(lang: Lang = 'en'): SurveySettings {
     closeAt: null,
     closedMessage: '',
     accent: ACCENTS[0].value,
+    textScale: 1,
+    textColor: '',
   };
 }
 
@@ -458,6 +460,7 @@ function readSurvey(raw: unknown, id: string): Survey {
     title: typeof b.title === 'string' ? b.title : 'Block',
     pageMode: b.pageMode === 'each' ? 'each' : 'single',
     randomizeQuestions: !!b.randomizeQuestions,
+    ...(b.responses === 'forced' || b.responses === 'optional' ? { responses: b.responses } : {}),
     displayLogic: b.displayLogic ?? null,
     branches: Array.isArray(b.branches) ? b.branches : [],
     questions: Array.isArray(b.questions) ? b.questions.map((x) => ({ ...x, id: x.id || uid('q'), required: !!x.required })) : [],

@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { blockContents, forgetSurveyView, readFolded, readOutlineShown, writeFolded, writeOutlineShown } from './builderView';
-import { createQuestion } from './questionTypes';
-import { blankSurvey, newBlock } from './templates';
+import { forgetSurveyView, readFolded, readOutlineShown, writeFolded, writeOutlineShown } from './builderView';
 
 class MemoryStorage {
   private items = new Map<string, string>();
@@ -77,19 +75,5 @@ describe('the outline', () => {
     writeOutlineShown(true);
     expect(readOutlineShown()).toBe(true);
     expect(store.has('survey-studio.outline')).toBe(false);
-  });
-});
-
-describe('a folded block', () => {
-  it('says what it holds', () => {
-    const s = blankSurvey('s');
-    const b = newBlock(s, 'Measures');
-    expect(blockContents(b)).toBe('Empty');
-    b.questions.push(createQuestion('text_block', s));
-    expect(blockContents(b)).toBe('1 text');
-    b.questions.push(createQuestion('single_choice', s));
-    expect(blockContents(b)).toBe('1 question, 1 text');
-    b.questions.push(createQuestion('matrix', s), createQuestion('video', s));
-    expect(blockContents(b)).toBe('3 questions, 1 text');
   });
 });

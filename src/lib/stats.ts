@@ -76,6 +76,7 @@ export function summarize(q: Question, responses: SurveyResponse[]): Summary {
   const answered = answers.length;
   switch (q.type) {
     case 'text_block':
+    case 'page_break':
       return { kind: 'none' };
     case 'video': {
       const vals = answers.map(({ v }) => videoAnswer(v)).filter((x): x is NonNullable<typeof x> => !!x);

@@ -2,9 +2,6 @@
 // blocks are folded (per survey) and whether the outline is shown. It lives in this
 // browser only, isn't part of undo, and never reaches respondents.
 
-import { TYPE_INFO } from './questionTypes';
-import type { Block } from './types';
-
 const foldKey = (surveyId: string) => `survey-studio.folded.${surveyId}`;
 const OUTLINE_KEY = 'survey-studio.outline';
 
@@ -56,14 +53,4 @@ export function writeOutlineShown(shown: boolean) {
 /** Forgets the view of a deleted survey. */
 export function forgetSurveyView(surveyId: string) {
   writeFolded(surveyId, []);
-}
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
-/** What a folded block holds, e.g. "5 questions, 1 text". */
-export function blockContents(block: Block): string {
-  const questions = block.questions.filter((q) => TYPE_INFO[q.type].answerable).length;
-  const texts = block.questions.length - questions;
-  const parts = [questions ? plural(questions, 'question', 'questions') : null, texts ? plural(texts, 'text', 'texts') : null].filter(Boolean);
-  return parts.length ? parts.join(', ') : 'Empty';
 }

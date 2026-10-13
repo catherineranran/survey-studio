@@ -149,3 +149,23 @@ describe('video questions', () => {
     expect(csv).toContain('Watched to the end');
   });
 });
+
+describe('page breaks', () => {
+  it('add no columns, and time on every page of a block adds up', async () => {
+    const { createQuestion } = await import('./questionTypes');
+    const { blankSurvey } = await import('./templates');
+    const s = blankSurvey('p1');
+    const b = s.blocks[0];
+    const brk = createQuestion('page_break', s);
+    b.questions.push(brk, { ...createQuestion('short_text', s), variable: 'later' });
+    const plain = buildColumns(s, { values: 'codes', includePreview: false, includeTimings: false }).map((c) => c.name);
+    expect(plain).toEqual(expect.arrayContaining(['Q1', 'later']));
+    expect(plain.some((n) => n === '' || n.startsWith('_'))).toBe(false);
+    const cols = buildColumns(s, { values: 'codes', includePreview: false, includeTimings: true });
+    const time = cols.find((c) => c.type === 'Timing')!;
+    const r = response({}, {});
+    r.meta = { ...r.meta!, pageTimes: { [b.id]: 12, [`${b.id}:${brk.id}`]: 8.5 }, path: [b.id, `${b.id}:${brk.id}`] };
+    expect(time.get(r)).toBe(20.5);
+    expect(summarize(brk, [r])).toEqual({ kind: 'none' });
+  });
+});

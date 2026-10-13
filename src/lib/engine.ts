@@ -169,11 +169,13 @@ export function makePlan(survey: Survey, seed: number, counts: AssignmentCounts 
   for (const b of survey.blocks) {
     const ids = b.questions.map((q) => q.id);
     if (b.randomizeQuestions) {
-      // Text blocks keep their position; everything else is shuffled around them.
-      const movable = b.questions.filter((q) => q.type !== 'text_block').map((q) => q.id);
+      // Text blocks and page breaks keep their position; questions are shuffled around them
+      // (so each page keeps its number of questions).
+      const fixed = (q: Question) => q.type === 'text_block' || q.type === 'page_break';
+      const movable = b.questions.filter((q) => !fixed(q)).map((q) => q.id);
       const shuffled = shuffle(movable, rand);
       let k = 0;
-      questionOrder[b.id] = b.questions.map((q) => (q.type === 'text_block' ? q.id : shuffled[k++]));
+      questionOrder[b.id] = b.questions.map((q) => (fixed(q) ? q.id : shuffled[k++]));
     } else {
       questionOrder[b.id] = ids;
     }
@@ -357,10 +359,28 @@ export interface Page {
   questionIds: string[];
 }
 
+/**
+ * A block's pages: one per question ('each'), or all questions together, split where the
+ * block has page breaks. Pages without questions (two breaks in a row) are left out.
+ * Page keys name the page in timings: the block id, then `<block id>:<question or break id>`.
+ */
 export function pagesForBlock(block: Block, plan: Plan): Page[] {
   const order = plan.questionOrder[block.id] ?? block.questions.map((q) => q.id);
-  if (block.pageMode === 'each') return order.map((qid) => ({ key: `${block.id}:${qid}`, blockId: block.id, questionIds: [qid] }));
-  return [{ key: block.id, blockId: block.id, questionIds: order }];
+  const breaks = new Set(block.questions.filter((q) => q.type === 'page_break').map((q) => q.id));
+  if (block.pageMode === 'each')
+    return order.filter((qid) => !breaks.has(qid)).map((qid) => ({ key: `${block.id}:${qid}`, blockId: block.id, questionIds: [qid] }));
+  const pages: Page[] = [];
+  let page: Page = { key: block.id, blockId: block.id, questionIds: [] };
+  for (const qid of order) {
+    if (!breaks.has(qid)) {
+      page.questionIds.push(qid);
+      continue;
+    }
+    if (page.questionIds.length) pages.push(page);
+    page = { key: pages.length || page.questionIds.length ? `${block.id}:${qid}` : block.id, blockId: block.id, questionIds: [] };
+  }
+  if (page.questionIds.length || !pages.length) pages.push(page);
+  return pages;
 }
 
 export function visibleQuestions(page: Page, ctx: Ctx): Question[] {
@@ -519,6 +539,7 @@ export function validateAnswer(
   const req = !opts.skipRequired && (q.required || q.type === 'consent');
   switch (q.type) {
     case 'text_block':
+    case 'page_break':
       return null;
     case 'video': {
       // Watched to the end, or it couldn't be played (respondents are never stuck).

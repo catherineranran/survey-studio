@@ -20,7 +20,9 @@ export type QuestionType =
   | 'constant_sum'
   | 'consent'
   | 'text_block'
-  | 'video';
+  | 'video'
+  /** Not a question: questions after it start a new page (in blocks shown all on one page). */
+  | 'page_break';
 
 export type Lang = 'en' | 'de';
 
@@ -183,6 +185,11 @@ export interface Block {
   pageMode: 'single' | 'each';
   /** Shuffle question order for each respondent. Text blocks stay in place. */
   randomizeQuestions?: boolean;
+  /**
+   * Chosen in the block's settings: every question must be answered ('forced') or may be
+   * skipped ('optional'), and new questions follow. Unset: each question decides itself.
+   */
+  responses?: 'forced' | 'optional';
   displayLogic?: Logic | null;
   /** Skip logic, evaluated in order after the block is completed. */
   branches: Branch[];
@@ -238,6 +245,10 @@ export interface SurveySettings {
   closeAt: string | null;
   closedMessage: string;
   accent: string;
+  /** Size of all text on respondent pages, relative to the standard size (1). */
+  textScale: number;
+  /** Colour of the text on respondent pages (#rrggbb); empty for the standard near-black. */
+  textColor: string;
 }
 
 export interface Survey {

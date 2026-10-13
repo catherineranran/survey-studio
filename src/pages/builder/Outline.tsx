@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon, IconButton, type IconName } from '../../components/ui';
-import { blockContents } from '../../lib/builderView';
+import { blockContents } from '../../lib/blocks';
 import { flowSteps } from '../../lib/flow';
 import { questionLabel } from '../../lib/lint';
 import type { Block, Survey } from '../../lib/types';
@@ -135,27 +135,33 @@ export function OutlineView({
             {b.displayLogic?.conditions.length ? <Icon name="logic" size={13} className="logic-ico" /> : null}
             {isFolded && (
               <span className="outline-count" title={blockContents(b)}>
-                {b.questions.length}
+                {b.questions.filter((q) => q.type !== 'page_break').length}
               </span>
             )}
           </button>
         </div>
         {!isFolded && b.questions.length > 0 && (
           <ol className="outline-qs">
-            {b.questions.map((q) => (
-              <li key={q.id}>
-                <button
-                  type="button"
-                  className={`outline-q ${sel?.kind === 'question' && sel.id === q.id ? 'is-active' : ''}`}
-                  title={`${q.variable ? `${q.variable}: ` : ''}${questionLabel(q)}`}
-                  onClick={() => onQuestion(q.id)}
-                >
-                  <span className="outline-var">{q.variable || 'Text'}</span>
-                  <span className="outline-text">{questionLabel(q)}</span>
-                  {q.displayLogic?.conditions.length ? <Icon name="logic" size={13} className="logic-ico" /> : null}
-                </button>
-              </li>
-            ))}
+            {b.questions.map((q) =>
+              q.type === 'page_break' ? (
+                <li key={q.id} className="outline-break">
+                  <span>Page break</span>
+                </li>
+              ) : (
+                <li key={q.id}>
+                  <button
+                    type="button"
+                    className={`outline-q ${sel?.kind === 'question' && sel.id === q.id ? 'is-active' : ''}`}
+                    title={`${q.variable ? `${q.variable}: ` : ''}${questionLabel(q)}`}
+                    onClick={() => onQuestion(q.id)}
+                  >
+                    <span className="outline-var">{q.variable || 'Text'}</span>
+                    <span className="outline-text">{questionLabel(q)}</span>
+                    {q.displayLogic?.conditions.length ? <Icon name="logic" size={13} className="logic-ico" /> : null}
+                  </button>
+                </li>
+              ),
+            )}
           </ol>
         )}
       </li>
@@ -186,7 +192,9 @@ export function OutlineView({
                 <ol>
                   {step.arms.map(({ arm, blocks }) => (
                     <li key={arm.id} className="outline-arm">
-                      {!(blocks.length === 1 && blocks[0].title.trim() === arm.label.trim()) && <div className="outline-arm-label">{arm.label || 'Unnamed branch'}</div>}
+                      {!(blocks.length === 1 && blocks[0].title.trim() === arm.label.trim()) && (
+                        <div className="outline-arm-label">{arm.label || 'Unnamed branch'}</div>
+                      )}
                       {blocks.length ? <ol>{blocks.map(block)}</ol> : <p className="outline-none">Nothing shown</p>}
                     </li>
                   ))}

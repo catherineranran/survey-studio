@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AutoTextarea, Button, Dialog, Field, IconButton, NumberInput, Toggle } from '../../components/ui';
+import { blockResponses, setBlockResponses } from '../../lib/blocks';
 import { allQuestions } from '../../lib/engine';
 import { describeTarget, placeOf, skipTargets } from '../../lib/flow';
 import { uid, variableError } from '../../lib/ids';
@@ -44,7 +45,7 @@ export function QuestionInspector({
       <section className="insp-section">
         <Field label="Question type">
           <select className="input" value={q.type} onChange={(e) => replace(convertQuestion(q, e.target.value as Question['type'], survey))}>
-            {TYPE_GROUPS.map((g) => (
+            {TYPE_GROUPS.filter((g) => g.name !== 'Layout').map((g) => (
               <optgroup key={g.name} label={g.name}>
                 {g.types.map((t) => (
                   <option key={t} value={t}>
@@ -259,6 +260,45 @@ function TypeSettings({
 
 /* ------------------------------------------------------------------ block */
 
+/** Forced response or optional for every question in a block at once, or each question for itself. */
+function ResponsesSetting({ block, change }: { block: Block; change: (mutate: (b: Block) => void) => void }) {
+  const choice = blockResponses(block);
+  const asked = block.questions.filter((q) => TYPE_INFO[q.type].answerable && q.type !== 'consent');
+  const required = asked.filter((q) => q.required).length;
+  // Chosen once, then single questions were changed: they decide now.
+  const drifted = !!block.responses && !choice;
+  const consent = block.questions.some((q) => q.type === 'consent');
+  const option = (value: 'forced' | 'optional' | null, label: string) => (
+    <button type="button" className={choice === value ? 'is-on' : ''} aria-pressed={choice === value} onClick={() => change((b) => setBlockResponses(b, value))}>
+      {label}
+    </button>
+  );
+  return (
+    <section className="insp-section">
+      <h3 className="insp-title" id={`resp-${block.id}`}>
+        Responses
+      </h3>
+      <div className="segmented" role="group" aria-labelledby={`resp-${block.id}`}>
+        {option('forced', 'Forced response')}
+        {option('optional', 'Optional')}
+        {option(null, 'Per question')}
+      </div>
+      <p className="hint">
+        {choice === 'forced'
+          ? 'Respondents must answer every question in this block before they go on. New questions are required too.'
+          : choice === 'optional'
+            ? 'Respondents can skip any question in this block. New questions are optional too.'
+            : drifted
+              ? `Some questions were changed one by one, so each decides for itself (${required} of ${asked.length} required). Choose Forced response or Optional to set them all again.`
+              : asked.length
+                ? `Each question’s Required switch decides (${required} of ${asked.length} required now).`
+                : 'Each question’s Required switch decides.'}
+        {consent ? ' Consent always needs an answer.' : ''}
+      </p>
+    </section>
+  );
+}
+
 export function BlockInspector({ survey, block, update }: { survey: Survey; block: Block; update: Updater<Survey> }) {
   const change = (mutate: (b: Block) => void, coalesce?: string) =>
     update(
@@ -280,15 +320,22 @@ export function BlockInspector({ survey, block, update }: { survey: Survey; bloc
         <Field label="Block name" hint="Respondents don’t see it. It names the block in logic, randomizers and exports.">
           <input className="input" value={block.title} onChange={(e) => change((b) => void (b.title = e.target.value), 'title')} />
         </Field>
-        <Field label="Pages">
+        <Field
+          label="Pages"
+          hint={
+            block.pageMode === 'each'
+              ? 'Page breaks have no effect while each question has its own page.'
+              : 'To start a new page between two questions, point between them and choose Page break.'
+          }
+        >
           <select className="input" value={block.pageMode} onChange={(e) => change((b) => void (b.pageMode = e.target.value as Block['pageMode']))}>
-            <option value="single">All questions on one page</option>
+            <option value="single">On one page, split at page breaks</option>
             <option value="each">One question per page</option>
           </select>
         </Field>
         <Toggle
           label="Shuffle question order"
-          hint="Text blocks stay where they are."
+          hint="Text blocks and page breaks stay where they are, so each page keeps its number of questions."
           checked={!!block.randomizeQuestions}
           onChange={(on) => change((b) => void (b.randomizeQuestions = on))}
         />
@@ -298,6 +345,8 @@ export function BlockInspector({ survey, block, update }: { survey: Survey; bloc
           </p>
         )}
       </section>
+
+      <ResponsesSetting block={block} change={change} />
 
       <section className="insp-section">
         <h3 className="insp-title">Display logic</h3>
@@ -487,7 +536,7 @@ function CopyLogicDialog({
       </p>
       <div className="copy-logic-list">
         {survey.blocks.map((b) => {
-          const qs = b.questions.filter((x) => x.id !== source.id);
+          const qs = b.questions.filter((x) => x.id !== source.id && x.type !== 'page_break');
           if (!qs.length) return null;
           return (
             <fieldset key={b.id} className="checks">

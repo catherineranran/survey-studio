@@ -71,6 +71,7 @@ const PATHS: Record<string, ReactNode> = {
   exit: <path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4M16 8l4 4-4 4M20 12H9" />,
   chevron: <path d="m6 9 6 6 6-6" />,
   fold: <path d="m8 4 4 4 4-4M8 20l4-4 4 4M4 12h16" />,
+  pagebreak: <path d="M6 3v5h12V3M6 21v-5h12v5M3 12h2.5M9 12h2.5M15 12h2.5M20.5 12H21" />,
   unfold: <path d="m8 8 4-4 4 4M8 16l4 4 4-4M4 12h16" />,
   sidebar: (
     <>

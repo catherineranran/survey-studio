@@ -1,10 +1,10 @@
 import { Fragment, useRef, useState, type DragEvent } from 'react';
-import { Button, Field, Icon, IconButton, Menu, Toggle, type MenuItem } from '../components/ui';
+import { Button, Field, Icon, IconButton, Menu, Toggle, downloadFile, useToast, type MenuItem } from '../components/ui';
+import { fileSlug } from '../lib/export';
 import { allQuestions } from '../lib/engine';
 import {
   addArm,
   canMoveBlock,
-  describeTarget,
   flowSteps,
   makeParallel,
   moveArm,
@@ -24,11 +24,11 @@ import {
   type FlowStep,
 } from '../lib/flow';
 import { VARIABLE_RE, uid } from '../lib/ids';
-import { TYPE_INFO } from '../lib/questionTypes';
 import { navigate, publicSurveyUrl } from '../lib/router';
 import type { Block, Survey, UrlParam } from '../lib/types';
 import type { Updater } from '../lib/useUndoable';
-import { describeLogic } from './builder/LogicEditor';
+import { flowchartPng } from './flowImage';
+import { blockTitle, describeBlock } from './flowText';
 
 const PANEL_PRESETS: { name: string; params: string[]; hint: string }[] = [
   { name: 'Prolific', params: ['PROLIFIC_PID', 'STUDY_ID', 'SESSION_ID'], hint: 'Prolific adds these to your study link automatically when you tick “URL parameters”.' },
@@ -64,6 +64,8 @@ export function Flow({
 }) {
   const [drag, setDrag] = useState<Drag | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const [drawing, setDrawing] = useState(false);
+  const toast = useToast();
   const heads = useRef(new Map<string, HTMLElement>());
   const steps = flowSteps(survey);
 
@@ -190,7 +192,6 @@ export function Flow({
 
   /* -------------------------------------------------------------- blocks */
 
-  const blockTitle = (b: Block) => b.title.trim() || 'Untitled block';
 
   const blockMenu = (b: Block, place: ArmPlace | null, stepIndex: number): (MenuItem | false | null | undefined)[] => {
     const prev = place ? undefined : steps[stepIndex - 1];
@@ -238,24 +239,7 @@ export function Flow({
     const onto: Target = { kind: 'onto', blockId: b.id };
     const ontoLive = !place && accepts(onto);
     const isOver = ontoLive && over === keyOf(onto);
-    const n = b.questions.filter((q) => TYPE_INFO[q.type].answerable).length;
-    const texts = b.questions.length - n;
-    const meta = [n ? `${n} question${n === 1 ? '' : 's'}` : texts ? 'text only' : 'empty'];
-    if (b.pageMode === 'each') meta.push('one per page');
-    if (b.randomizeQuestions) meta.push('shuffled');
-    const rules: string[] = [];
-    if (b.displayLogic?.conditions.length) rules.push(`Shown only if ${describeLogic(b.displayLogic, survey)}`);
-    // Questions with display logic, e.g. skipped for one branch of a randomizer.
-    const shownIf = new Map<string, number>();
-    for (const q of b.questions) if (q.displayLogic?.conditions.length) shownIf.set(describeLogic(q.displayLogic, survey), (shownIf.get(describeLogic(q.displayLogic, survey)) ?? 0) + 1);
-    const withLogic = [...shownIf.values()].reduce((a, x) => a + x, 0);
-    if (shownIf.size === 1) rules.push(`${withLogic === 1 ? '1 question' : `${withLogic} questions`} shown only if ${[...shownIf.keys()][0]}`);
-    else if (withLogic) rules.push(`${withLogic} questions have display logic`);
-    if (b.questions.some((q) => q.type === 'consent' && q.endOnDecline !== false)) rules.push('Ends the survey if consent is declined');
-    for (const br of b.branches) {
-      const to = br.target === 'end' ? `end the survey (${br.endTag || 'complete'})` : `skip to ${describeTarget(survey, b.id, br.target)}`;
-      rules.push(`If ${describeLogic(br.logic, survey)}, ${to}`);
-    }
+    const { meta, rules } = describeBlock(survey, b);
     return (
       <div
         key={b.id}
@@ -438,11 +422,28 @@ export function Flow({
 
   const hasRandomizer = steps.some((st) => st.kind === 'randomizer');
 
+  // The flow as a flowchart image, for papers, preregistrations and ethics applications.
+  const downloadFlowchart = async () => {
+    setDrawing(true);
+    try {
+      downloadFile(`${fileSlug(survey.title) || 'survey'}-flow.png`, await flowchartPng(survey));
+    } catch (e) {
+      toast(`Couldn’t make the image: ${e instanceof Error ? e.message : e}`, 'error');
+    } finally {
+      setDrawing(false);
+    }
+  };
+
   return (
     <div className="page-flow">
       <section className="panel">
         <header className="panel-head">
-          <h2>Survey flow</h2>
+          <div className="panel-title-row">
+            <h2>Survey flow</h2>
+            <Button size="sm" icon="download" onClick={downloadFlowchart} disabled={drawing}>
+              {drawing ? 'Drawing…' : 'Download as PNG'}
+            </Button>
+          </div>
           <p className="hint">
             Drag blocks to arrange the path. Drop a block between steps to put it in sequence, onto another block to randomize between them, or into a
             branch of a randomizer. Each respondent gets one branch, then everyone continues with the steps below it.

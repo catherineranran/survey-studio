@@ -25,6 +25,7 @@ import {
   type Plan,
   type Position,
 } from '../lib/engine';
+import { respondentStyle } from '../lib/appearance';
 import { t } from '../lib/i18n';
 import { TYPE_INFO } from '../lib/questionTypes';
 import type { AnswerValue, Lang, Question, ResponseData, Survey } from '../lib/types';
@@ -400,8 +401,8 @@ export function Respond({ surveyId, previewSurvey, previewOptions }: RespondProp
   };
 
   /* ---------------------------------------------------------- render */
-  const accent = rt?.survey.settings.accent ?? previewSurvey?.settings.accent;
-  const style = accent ? ({ '--accent': accent } as CSSProperties) : undefined;
+  // Accent, text size and text colour from the survey's settings.
+  const style = respondentStyle(rt?.survey.settings ?? previewSurvey?.settings) as CSSProperties | undefined;
 
   if (phase.kind === 'loading') {
     return (
