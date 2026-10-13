@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { base64url, fromBase64url, parseVideoLink } from './video';
+import { base64url, fetchManifest, fromBase64url, parseVideoLink } from './video';
 
 describe('video links', () => {
   it('reads files and video folders, with or without a key', () => {
@@ -15,6 +15,20 @@ describe('video links', () => {
     expect(parseVideoLink('https://www.youtube.com/watch?v=abc')).toBeNull();
     expect(parseVideoLink('javascript:alert(1)//.mp4')).toBeNull();
     expect(parseVideoLink('not a link')).toBeNull();
+  });
+
+  it('says plainly when a video folder can’t be reached', async () => {
+    const real = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new TypeError('Failed to fetch');
+    }) as typeof fetch;
+    try {
+      await expect(fetchManifest('https://ranranli.net/x/video.json')).rejects.toThrow(
+        'The video folder couldn’t be reached. Check the link and the internet connection.',
+      );
+    } finally {
+      globalThis.fetch = real;
+    }
   });
 
   it('round-trips keys as base64url', () => {

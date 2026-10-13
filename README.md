@@ -15,6 +15,7 @@ It is a static web app. Run it on your laptop, host it free on GitHub Pages, and
 - Option lists you can paste into: paste ten lines, get ten options. Enter adds a row, Backspace on an empty row removes it
 - Every option has an export code, every question a variable name, so the data file is analysis-ready
 - Undo / redo, autosave, duplicate questions and blocks, drag to reorder
+- An outline at the left of the builder: blocks in survey order (randomizer branches side by side) and their questions, marking where you are; click to jump. Fold any block to a one-line summary, or fold them all, to move around long surveys (remembered per survey in your browser)
 - A survey checker that catches broken logic, duplicate variable names and other problems before you publish
 
 **Logic and randomization**

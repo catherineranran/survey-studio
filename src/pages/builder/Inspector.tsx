@@ -429,6 +429,7 @@ export function SurveyOverview({ survey }: { survey: Survey }) {
         <ul className="tips">
           <li>Select a question to edit it. Its settings and logic appear here.</li>
           <li>Select a block’s header for page layout, shuffling and skip logic.</li>
+          <li>Fold blocks you aren’t working on with the arrow by their names. The outline jumps to any block or question.</li>
           <li>In option lists, Enter adds a row and pasting a list adds many rows.</li>
           <li>Ctrl/⌘ + Z undoes, Ctrl/⌘ + Shift + Z redoes.</li>
         </ul>

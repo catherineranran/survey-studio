@@ -245,9 +245,14 @@ textarea {
   background: var(--danger-tint);
 }
 
-.btn:disabled {
+.btn:disabled,
+.btn[aria-disabled='true'] {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.btn-quiet[aria-disabled='true']:hover {
+  background: transparent;
 }
 
 .icon-btn {
@@ -276,9 +281,15 @@ textarea {
   color: var(--ink);
 }
 
-.icon-btn:disabled {
+.icon-btn:disabled,
+.icon-btn[aria-disabled='true'] {
   opacity: 0.35;
   cursor: default;
+}
+
+.icon-btn[aria-disabled='true']:hover {
+  background: transparent;
+  color: var(--ink-2);
 }
 
 .link-btn {
@@ -1330,11 +1341,18 @@ input:focus-visible + .mark {
 }
 
 .builder.is-wide.has-outline {
-  grid-template-columns: 220px minmax(0, 1fr) 350px;
-  max-width: 1560px;
+  grid-template-columns: 228px minmax(0, 1fr) 340px;
+  max-width: 1580px;
 }
 
-.outline,
+@media (max-width: 1399px) {
+  .builder.is-wide.has-outline {
+    grid-template-columns: 206px minmax(0, 1fr) 320px;
+    gap: 16px;
+    padding-inline: 16px;
+  }
+}
+
 .inspector {
   position: sticky;
   top: 12px;
@@ -1342,17 +1360,46 @@ input:focus-visible + .mark {
   overflow: auto;
 }
 
-.outline {
-  padding: 4px 4px 24px 0;
-  font-size: 13.5px;
-}
-
-.outline-title,
 .inspector-title {
   font-size: 12.5px;
   font-weight: 700;
   color: var(--ink-3);
   margin: 4px 0 8px;
+}
+
+/* ------------------------------------------------------------ outline */
+
+.outline {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 24px);
+  min-width: 0;
+  font-size: 13.5px;
+}
+
+.outline-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 0 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.outline-title {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-3);
+}
+
+.outline-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  padding: 8px 2px 32px 0;
 }
 
 .outline ol {
@@ -1361,23 +1408,63 @@ input:focus-visible + .mark {
   padding: 0;
 }
 
-.outline > ol > li {
-  margin-bottom: 10px;
+.outline-list > ol > li + li {
+  margin-top: 4px;
+}
+
+.outline-row {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.fold-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-s);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.fold-btn:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.fold-btn .icon {
+  transition: transform 0.15s ease;
+}
+
+.fold-btn.is-folded .icon {
+  transform: rotate(-90deg);
+}
+
+.outline-fold {
+  width: 22px;
+  height: 26px;
 }
 
 .outline-block,
 .outline-q {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
-  width: 100%;
-  padding: 4px 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 3px 8px 3px 4px;
   border: 0;
   background: none;
   border-radius: 6px;
+  font: inherit;
   text-align: left;
-  cursor: pointer;
   color: var(--ink-2);
+  cursor: pointer;
 }
 
 .outline-block {
@@ -1385,16 +1472,66 @@ input:focus-visible + .mark {
   color: var(--ink);
 }
 
-.outline-q-text {
+/* Block numbers are answer-sheet bubbles; the block you're at is filled in. */
+.outline-num {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--form);
+  border: 1.5px solid color-mix(in oklab, var(--form) 55%, transparent);
+  border-radius: 999px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.outline-item.is-current > .outline-row .outline-num {
+  background: var(--form);
+  border-color: var(--form);
+  color: var(--on-form);
+}
+
+.outline-text {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  flex: 1;
 }
 
-.outline-q .mono {
-  color: var(--ink-3);
+.outline-count {
   flex: none;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.outline-qs {
+  padding: 1px 0 4px 21px !important;
+}
+
+.outline-q {
+  padding: 2px 8px;
+  font-size: 13px;
+  align-items: baseline;
+}
+
+.outline-var {
+  flex: none;
+  max-width: 62%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
 }
 
 .outline-block:hover,
@@ -1402,9 +1539,128 @@ input:focus-visible + .mark {
   background: var(--paper);
 }
 
-.outline .is-active {
+.outline .is-active,
+.outline .is-active:hover {
   background: var(--form-tint);
   color: var(--ink);
+}
+
+.outline-rand-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 2px 6px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.outline-rand-head .icon {
+  color: var(--form);
+}
+
+.outline-rand-head .outline-var {
+  color: var(--ink-2);
+  font-weight: 650;
+}
+
+.outline-rand > ol {
+  margin: 2px 0 2px 12px !important;
+  padding-left: 4px !important;
+  border-left: 1.5px dashed color-mix(in oklab, var(--form) 50%, transparent);
+}
+
+.outline-arm + .outline-arm {
+  margin-top: 2px;
+}
+
+.outline-arm-label {
+  padding: 4px 8px 0 10px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--form);
+}
+
+.outline-none {
+  padding: 1px 8px 4px 10px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+/* On narrower screens the outline opens over the page from the left. */
+.outline-drawer {
+  position: fixed;
+  inset: 0 auto 0 0;
+  margin: 0;
+  width: min(340px, 88vw);
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: var(--canvas);
+  color: var(--ink);
+  box-shadow: var(--pop-shadow);
+  overflow: hidden;
+}
+
+.outline-drawer[open] {
+  animation: drawer-in 0.18s ease-out;
+}
+
+.outline-drawer::backdrop {
+  background: rgb(14 20 18 / 0.35);
+}
+
+.outline-drawer .outline {
+  position: static;
+  height: 100%;
+  max-height: none;
+  padding: 14px 8px 0 10px;
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(-28px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .outline-drawer[open] {
+    animation: none;
+  }
+  .fold-btn .icon,
+  .outline-num {
+    transition: none;
+  }
+}
+
+.canvas-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -8px 0 8px;
+}
+
+.canvas-bar-gap {
+  flex: 1;
+}
+
+/* Without the outline beside the blocks, the toolbar (and its Outline button) stays in reach. */
+.builder:not(.has-outline) .canvas-bar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  margin: -8px -6px 8px;
+  padding: 6px;
+  background: color-mix(in oklab, var(--canvas) 88%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.builder:not(.has-outline) .block {
+  scroll-margin-top: 56px;
 }
 
 .logic-ico {
@@ -1503,12 +1759,73 @@ input:focus-visible + .mark {
 
 .block-head {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 10px 10px 16px;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 10px 10px 8px;
   border-bottom: 1px dashed var(--line);
   cursor: pointer;
+}
+
+/* Title, badges and (when folded) the summary wrap among themselves; the menu stays top right. */
+.block-head-main {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
+  gap: 8px 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.block-head > .menu {
+  margin-block: -3px;
+}
+
+/* The chevron and the title stay on one line; a long title shortens instead. */
+.block-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.block.is-folded {
+  margin-bottom: 10px;
+}
+
+.block.is-folded .block-head {
+  border-bottom-color: transparent;
+}
+
+/* A folded block says what it holds: counts, then its variable names. */
+.block-summary {
+  order: 5;
+  flex: 1 0 100%;
+  display: flex;
+  min-width: 0;
+  margin-top: -7px;
+  padding-left: 34px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.block-summary > span {
+  flex: none;
+}
+
+.block-summary > span + span::before {
+  content: '·';
+  margin: 0 8px;
+}
+
+.block-summary > .block-summary-vars {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  font-family: var(--mono);
+  font-size: 11.5px;
 }
 
 .block-title-row {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Dialog, Empty, Field, Icon, Menu, Spinner, downloadFile, relativeTime, useConfirm, useToast } from '../components/ui';
 import { useBackend } from '../lib/backend/context';
+import { forgetSurveyView } from '../lib/builderView';
 import { fileSlug } from '../lib/export';
 import { uuid } from '../lib/ids';
 import { navigate } from '../lib/router';
@@ -70,7 +71,10 @@ export function Dashboard() {
       danger: true,
     });
     if (!ok) return;
-    await backend.deleteSurvey(s.id).catch((e) => toast(e.message, 'error'));
+    await backend
+      .deleteSurvey(s.id)
+      .then(() => forgetSurveyView(s.id))
+      .catch((e) => toast(e.message, 'error'));
     load();
   };
 

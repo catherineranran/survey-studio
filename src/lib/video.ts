@@ -47,6 +47,8 @@ async function fetchPatiently(url: string, ms: number, init: RequestInit, onByte
     });
   } catch (e) {
     if (ctrl.signal.aborted) throw new Error(`stopped loading (no data for ${Math.round(ms / 1000)} seconds)`);
+    // Browsers word network failures differently ("Failed to fetch", "Load failed").
+    if (e instanceof TypeError) throw new Error('couldn’t be reached. Check the link and the internet connection');
     throw e;
   } finally {
     clearTimeout(timer);

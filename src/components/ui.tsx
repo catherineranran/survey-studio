@@ -70,6 +70,14 @@ const PATHS: Record<string, ReactNode> = {
   right: <path d="M5 12h14M13 6l6 6-6 6" />,
   exit: <path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4M16 8l4 4-4 4M20 12H9" />,
   chevron: <path d="m6 9 6 6 6-6" />,
+  fold: <path d="m8 4 4 4 4-4M8 20l4-4 4 4M4 12h16" />,
+  unfold: <path d="m8 8 4-4 4 4M8 16l4 4 4-4M4 12h16" />,
+  sidebar: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <path d="M9.5 4.5v15M5.8 8.5h1.4M5.8 11.5h1.4M5.8 14.5h1.4" />
+    </>
+  ),
   link: <path d="M10 13.5a4.5 4.5 0 0 0 6.8.5l2.7-2.7a4.5 4.5 0 0 0-6.4-6.4L11.6 6.4M14 10.5a4.5 4.5 0 0 0-6.8-.5l-2.7 2.7a4.5 4.5 0 0 0 6.4 6.4l1.5-1.5" />,
   chart: <path d="M4 20V11M10 20V5M16 20v-6M2 20h20" />,
   star: <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z" />,

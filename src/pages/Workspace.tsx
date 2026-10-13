@@ -227,7 +227,7 @@ export function Workspace({ id, tab }: { id: string; tab: string }) {
 
       <div className="ws-body">
         <ErrorBoundary key={active}>
-        {active === 'build' && <Builder survey={survey} update={update} onPreview={openPreview} />}
+        {active === 'build' && <Builder survey={survey} surveyId={id} update={update} onPreview={openPreview} />}
         {active === 'flow' && <Flow survey={survey} update={update} surveyId={id} onPreview={openPreview} />}
         {active === 'settings' && <SettingsTab survey={survey} update={update} />}
         {active === 'share' && <ShareTab backend={backend} record={record} survey={survey} hasChanges={hasChanges} onPublish={publish} onStatus={setStatus} />}
