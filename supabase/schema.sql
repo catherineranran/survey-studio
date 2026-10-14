@@ -122,10 +122,13 @@ revoke all on function public.guard_new_account() from public, anon, authenticat
 
 do $$
 begin
-  -- Accounts created before this script ran (e.g. in the dashboard) are admins too.
-  insert into public.owners (email)
-    select lower(trim(email)) from auth.users where coalesce(trim(email), '') <> ''
-    on conflict do nothing;
+  -- On the first run, accounts that already exist (e.g. made in the dashboard) become
+  -- admins. Never on later runs: by then other accounts may be ordinary sign-ups.
+  if not exists (select 1 from public.owners) then
+    insert into public.owners (email)
+      select lower(trim(email)) from auth.users where coalesce(trim(email), '') <> ''
+      on conflict do nothing;
+  end if;
   drop trigger if exists guard_new_account on auth.users;
   create trigger guard_new_account
     before insert on auth.users
