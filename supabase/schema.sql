@@ -14,6 +14,10 @@
 --     They can only call get_public_survey() (returns the published snapshot,
 --     never the working draft) and submit_response() (only while the survey is
 --     open, before its close date and below its response limit).
+--   * Collaborator links: an owner can share a survey's builder through a link
+--     ("view" or "edit"). People with the link, signed in or not, can only call
+--     get_shared_survey() and, for edit links, save_shared_survey(). Neither shows
+--     responses, publishes, or changes who has access. Turning a link off deletes it.
 
 create extension if not exists pgcrypto;
 
@@ -333,6 +337,85 @@ as $$
   group by 1;
 $$;
 
+-- Collaborator links ----------------------------------------------------------
+--
+-- The token is the whole credential: 32 random URL-safe characters made by the app.
+-- Owners create, list and delete their surveys' links (row-level security); everyone
+-- else only reaches a survey through the two functions below.
+
+create table if not exists public.survey_shares (
+  token      text primary key check (length(token) >= 32),
+  survey_id  uuid not null references public.surveys (id) on delete cascade,
+  role       text not null check (role in ('view', 'edit')),
+  created_at timestamptz not null default now()
+);
+create index if not exists survey_shares_survey_idx on public.survey_shares (survey_id);
+
+alter table public.survey_shares enable row level security;
+revoke all on public.survey_shares from anon;
+grant select, insert, delete on public.survey_shares to authenticated;
+
+drop policy if exists "Owners manage their share links" on public.survey_shares;
+create policy "Owners manage their share links" on public.survey_shares
+  for all to authenticated
+  using (exists (select 1 from public.surveys s where s.id = survey_id and s.owner_id = (select auth.uid())))
+  with check (exists (select 1 from public.surveys s where s.id = survey_id and s.owner_id = (select auth.uid())));
+
+-- The working copy behind a link, and what the link allows. Null for unknown links.
+create or replace function public.get_shared_survey(p_token text)
+returns jsonb
+language sql stable security definer
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'role', sh.role,
+    'id', s.id,
+    'title', s.title,
+    'status', s.status,
+    'definition', s.definition,
+    'published_at', s.published_at,
+    'created_at', s.created_at,
+    'updated_at', s.updated_at
+  )
+  from public.survey_shares sh
+  join public.surveys s on s.id = sh.survey_id
+  where sh.token = p_token;
+$$;
+
+-- Edit links: replace the working copy (never the published snapshot or the status).
+-- p_base is the updated_at the editor loaded or last saved; if someone saved since,
+-- nothing is written and the app asks which version to keep.
+create or replace function public.save_shared_survey(p_token text, p_definition jsonb, p_base timestamptz default null)
+returns timestamptz
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  sid uuid;
+  at  timestamptz;
+begin
+  select survey_id into sid from public.survey_shares where token = p_token and role = 'edit';
+  if sid is null then
+    raise exception 'not_allowed';
+  end if;
+  if jsonb_typeof(p_definition) <> 'object'
+     or jsonb_typeof(p_definition -> 'blocks') <> 'array'
+     or octet_length(p_definition::text) > 5000000 then
+    raise exception 'invalid survey';
+  end if;
+  update public.surveys
+     set definition = jsonb_set(p_definition, '{id}', to_jsonb(sid::text)),
+         title = left(coalesce(nullif(trim(p_definition ->> 'title'), ''), 'Untitled survey'), 500)
+   where id = sid
+     and (p_base is null or updated_at = p_base)
+  returning updated_at into at;
+  if at is null then
+    raise exception 'conflict';
+  end if;
+  return at;
+end;
+$$;
+
 -- Response counts for the signed-in owner's dashboard (row-level security applies).
 create or replace function public.my_response_counts()
 returns table (survey_id uuid, n bigint)
@@ -351,6 +434,8 @@ revoke all on function public.signup_mode() from public;
 revoke all on function public.is_admin() from public, anon;
 revoke all on function public.get_signup_settings() from public, anon;
 revoke all on function public.set_signup_settings(text, boolean) from public, anon;
+revoke all on function public.get_shared_survey(text) from public;
+revoke all on function public.save_shared_survey(text, jsonb, timestamptz) from public;
 
 grant execute on function public.get_public_survey(uuid) to anon, authenticated;
 grant execute on function public.submit_response(uuid, jsonb) to anon, authenticated;
@@ -360,3 +445,5 @@ grant execute on function public.signup_mode() to anon, authenticated;
 grant execute on function public.is_admin() to authenticated;
 grant execute on function public.get_signup_settings() to authenticated;
 grant execute on function public.set_signup_settings(text, boolean) to authenticated;
+grant execute on function public.get_shared_survey(text) to anon, authenticated;
+grant execute on function public.save_shared_survey(text, jsonb, timestamptz) to anon, authenticated;

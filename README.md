@@ -86,7 +86,7 @@ For sign-ups to work, two Supabase settings under **Authentication → Sign In /
 
 To make someone else an admin, run `insert into public.owners (email) values ('their@email.org');` in the SQL Editor.
 
-The anon key is meant to be public. Respondents can't read any table: they can only load a *published* survey and submit a response while it's open, through two database functions. Each owner only ever sees their own surveys and responses (row-level security). Surveys created in browser storage stay there; to move one, download it as JSON on the dashboard and import it after connecting Supabase.
+The anon key is meant to be public. Respondents can't read any table: they can only load a *published* survey and submit a response while it's open, through two database functions. Each owner only ever sees their own surveys and responses (row-level security). Collaborator links work the same way: two more functions load a survey's working copy, and save it for edit links, only for someone who has the link's 32-character key; they never return responses. Surveys created in browser storage stay there; to move one, download it as JSON on the dashboard and import it after connecting Supabase.
 
 On Supabase's free plan, projects that see no activity for a week are paused. Restore them from the Supabase dashboard; no data is lost.
 
@@ -102,6 +102,10 @@ GitHub Pages needs a **public** repository on the free plan. If you want to keep
 ## Using it
 
 **Survey links.** Respondents get `https://…/survey-studio/?s=<survey id>`. Add URL parameters you declared in the Flow tab, e.g. `&PROLIFIC_PID=…`. The Share tab gives you the ready-made Prolific study URL, a QR code and an embed snippet.
+
+**Sharing the survey with colleagues.** In the Share tab, *Share with collaborators* makes links that open the survey in the builder, no account needed: a *view-only* link (look around and preview) or an *edit* link (also change questions, blocks and settings; the changes are saved to your survey). People with these links never see responses, can't publish, and can't share further; their previews don't keep test answers. Anyone who has a link has its access, so send it only to people you trust. *Turn off* stops a link at once; a new link is always a different one. This needs the Supabase database (run the latest `supabase/schema.sql` once after updating).
+
+**Two people editing.** Every save says which stored version it builds on. If someone else saved in between (a collaborator, or you in another window), nothing is overwritten: the builder says your latest changes aren't saved and lets you load the latest version or keep yours.
 
 **Logic order.** Display logic and skip rules can only look at questions that come earlier. Skip rules only jump forward, so a survey can't loop. If a respondent goes back and changes an answer, answers on pages that no longer apply are discarded on submit.
 

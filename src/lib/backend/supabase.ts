@@ -3,9 +3,10 @@
 // accept responses while a survey is open. See supabase/schema.sql.
 
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
+import { shareToken } from '../ids';
 import { normalizeSurvey } from '../templates';
 import type { PublicSurvey, ResponseData, Survey, SurveyRecord, SurveyResponse, SurveyStatus, SurveySummary } from '../types';
-import { BackendError, type AuthUser, type Backend, type SignupMode, type SignupSettings } from './types';
+import { BackendError, CONFLICT_MESSAGE, type AuthUser, type Backend, type ShareLink, type ShareRole, type SignupMode, type SignupSettings } from './types';
 
 interface SurveyRow {
   id: string;
@@ -26,10 +27,21 @@ interface ResponseRow {
   created_at: string;
 }
 
+interface ShareRow {
+  token: string;
+  role: ShareRole;
+  created_at: string;
+}
+
 const toUser = (u: User | null | undefined): AuthUser | null => (u ? { id: u.id, email: u.email ?? null } : null);
 
 function fail(error: { message?: string; code?: string } | null, fallback = 'Something went wrong talking to the database.'): never {
   const msg = error?.message ?? fallback;
+  if (/^conflict$/i.test(msg)) throw new BackendError(CONFLICT_MESSAGE, 'conflict');
+  if (/^not_allowed$/i.test(msg)) throw new BackendError('This link doesn’t allow editing (any more).', 'auth');
+  // Tables or functions added in a later version of schema.sql.
+  if (/schema cache|does not exist/i.test(msg) || /^PGRST20[0-9]$/.test(error?.code ?? ''))
+    throw new BackendError('This needs the latest database update: in Supabase, open SQL Editor and run supabase/schema.sql again.', 'setup');
   if (/closed/i.test(msg)) throw new BackendError(msg, 'closed');
   if (/limit/i.test(msg)) throw new BackendError(msg, 'limit');
   if (/not_found|not found/i.test(msg)) throw new BackendError(msg, 'not_found');
@@ -143,28 +155,78 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
       if (error) fail(error);
       return toRecord(data as SurveyRow);
     },
-    async saveDraft(id, def) {
-      const { data, error } = await sb.from('surveys').update({ title: def.title, definition: def }).eq('id', id).select('updated_at').single();
+    async saveDraft(id, def, base) {
+      let query = sb.from('surveys').update({ title: def.title, definition: def }).eq('id', id);
+      if (base) query = query.eq('updated_at', base);
+      const { data, error } = await query.select('updated_at').maybeSingle();
       if (error) fail(error);
+      if (!data) throw base ? new BackendError(CONFLICT_MESSAGE, 'conflict') : new BackendError('This survey no longer exists.', 'not_found');
       return (data as { updated_at: string }).updated_at;
     },
-    async publish(id, def, status) {
-      const { data, error } = await sb
+    async publish(id, def, status, base) {
+      let query = sb
         .from('surveys')
         .update({ title: def.title, definition: def, published: def, published_at: new Date().toISOString(), status })
-        .eq('id', id)
-        .select('*')
-        .single();
+        .eq('id', id);
+      if (base) query = query.eq('updated_at', base);
+      const { data, error } = await query.select('*').maybeSingle();
       if (error) fail(error);
+      if (!data) throw base ? new BackendError(CONFLICT_MESSAGE, 'conflict') : new BackendError('This survey no longer exists.', 'not_found');
       return toRecord(data as SurveyRow);
     },
-    async setStatus(id, status) {
-      const { error } = await sb.from('surveys').update({ status }).eq('id', id);
+    async setStatus(id, status, base) {
+      if (base) {
+        const { data, error } = await sb.from('surveys').update({ status }).eq('id', id).eq('updated_at', base).select('updated_at').maybeSingle();
+        if (error) fail(error);
+        if (data) return (data as { updated_at: string }).updated_at;
+      }
+      const { data, error } = await sb.from('surveys').update({ status }).eq('id', id).select('updated_at').single();
       if (error) fail(error);
+      return base ? null : (data as { updated_at: string }).updated_at;
     },
     async deleteSurvey(id) {
       const { error } = await sb.from('surveys').delete().eq('id', id);
       if (error) fail(error);
+    },
+
+    async listShareLinks(surveyId): Promise<ShareLink[]> {
+      const { data, error } = await sb.from('survey_shares').select('token,role,created_at').eq('survey_id', surveyId).order('created_at');
+      if (error) fail(error);
+      return ((data ?? []) as ShareRow[]).map((r) => ({ token: r.token, role: r.role, createdAt: r.created_at }));
+    },
+    async createShareLink(surveyId, role) {
+      const { data, error } = await sb.from('survey_shares').insert({ token: shareToken(), survey_id: surveyId, role }).select('token,role,created_at').single();
+      if (error) fail(error);
+      const r = data as ShareRow;
+      return { token: r.token, role: r.role, createdAt: r.created_at };
+    },
+    async deleteShareLink(token) {
+      const { error } = await sb.from('survey_shares').delete().eq('token', token);
+      if (error) fail(error);
+    },
+    async getSharedSurvey(token) {
+      const { data, error } = await sb.rpc('get_shared_survey', { p_token: token });
+      if (error) fail(error);
+      if (!data) return null;
+      const d = data as Omit<SurveyRow, 'published'> & { role: ShareRole };
+      return {
+        role: d.role === 'edit' ? 'edit' : 'view',
+        record: {
+          id: d.id,
+          title: d.title,
+          status: d.status,
+          definition: normalizeSurvey(d.definition, d.id),
+          published: null,
+          publishedAt: d.published_at,
+          createdAt: d.created_at,
+          updatedAt: d.updated_at,
+        },
+      };
+    },
+    async saveSharedSurvey(token, def, base) {
+      const { data, error } = await sb.rpc('save_shared_survey', { p_token: token, p_definition: def, p_base: base ?? null });
+      if (error) fail(error);
+      return String(data);
     },
 
     async getPublicSurvey(id): Promise<PublicSurvey | null> {

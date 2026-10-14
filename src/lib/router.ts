@@ -28,6 +28,12 @@ export function publicSurveyUrl(id: string): string {
   return `${origin}${pathname}?s=${encodeURIComponent(id)}`;
 }
 
+/** A collaborator link: opens the survey's builder (view only or editing), no account needed. */
+export function sharedSurveyUrl(token: string): string {
+  const { origin, pathname } = window.location;
+  return `${origin}${pathname}#/shared/${encodeURIComponent(token)}`;
+}
+
 /** The link that lets someone create their own account. */
 export function inviteUrl(code: string): string {
   const { origin, pathname } = window.location;

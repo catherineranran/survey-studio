@@ -10,9 +10,12 @@ import { Respond } from './Respond';
 /**
  * The preview window: runs the builder's working copy like a respondent would, with
  * tools for testing: start at any block, pick a randomizer branch, skip required questions.
+ * Opened from a collaborator link (`shareToken`), it finds the survey through the link and
+ * doesn't keep test responses.
  */
-export function PreviewWindow({ surveyId }: { surveyId: string }) {
+export function PreviewWindow({ surveyId: idProp, shareToken }: { surveyId?: string; shareToken?: string }) {
   const backend = useBackend();
+  const [surveyId, setSurveyId] = useState(idProp ?? '');
   const [survey, setSurvey] = useState<Survey | null | undefined>(undefined);
   const [newer, setNewer] = useState<Survey | null>(null);
   const [from, setFrom] = useState(() => hashQuery().get('from') ?? '');
@@ -24,17 +27,26 @@ export function PreviewWindow({ surveyId }: { surveyId: string }) {
   // The working copy the builder handed over, or else the last saved draft.
   useEffect(() => {
     let cancelled = false;
-    const draft = readPreviewDraft(surveyId);
-    if (draft) setSurvey(draft);
-    else
-      backend
-        .getSurvey(surveyId)
-        .then((rec) => !cancelled && setSurvey(rec ? rec.definition : null))
-        .catch(() => !cancelled && setSurvey(null));
+    (async () => {
+      let id = idProp ?? '';
+      let saved: Survey | null = null;
+      if (shareToken) {
+        const shared = await backend.getSharedSurvey(shareToken).catch(() => null);
+        if (!shared) return !cancelled && setSurvey(null);
+        id = shared.record.id;
+        saved = shared.record.definition;
+      }
+      if (cancelled) return;
+      setSurveyId(id);
+      const draft = readPreviewDraft(id);
+      if (draft || saved) return setSurvey(draft ?? saved);
+      const rec = await backend.getSurvey(id).catch(() => null);
+      if (!cancelled) setSurvey(rec ? rec.definition : null);
+    })();
     return () => {
       cancelled = true;
     };
-  }, [backend, surveyId]);
+  }, [backend, idProp, shareToken]);
 
   useEffect(() => {
     running.current = survey ? JSON.stringify(survey) : '';
@@ -86,7 +98,7 @@ export function PreviewWindow({ surveyId }: { surveyId: string }) {
     });
   const startAt = (blockId: string) => {
     setFrom(blockId);
-    window.history.replaceState(null, '', previewHash(surveyId, blockId || undefined));
+    window.history.replaceState(null, '', previewHash(surveyId, blockId || undefined, undefined, shareToken));
     restart();
   };
 
@@ -103,7 +115,7 @@ export function PreviewWindow({ surveyId }: { surveyId: string }) {
       <header className="preview-bar">
         <div className="preview-label">
           <strong>Preview</strong>
-          <span className="hint">Answers you submit are kept as test responses.</span>
+          <span className="hint">{shareToken ? 'Answers you submit aren’t kept.' : 'Answers you submit are kept as test responses.'}</span>
         </div>
         <label className="pw-field">
           <span>Start at</span>
@@ -187,7 +199,12 @@ export function PreviewWindow({ surveyId }: { surveyId: string }) {
       )}
       <div className="preview-scroll">
         <div className={`preview-frame preview-${prefs.device}`}>
-          <Respond key={run} surveyId={surveyId} previewSurvey={survey} previewOptions={{ startBlockId: start || undefined, forced, skipRequired: prefs.skipRequired }} />
+          <Respond
+            key={run}
+            surveyId={surveyId}
+            previewSurvey={survey}
+            previewOptions={{ startBlockId: start || undefined, forced, skipRequired: prefs.skipRequired, discard: !!shareToken }}
+          />
         </div>
       </div>
     </div>

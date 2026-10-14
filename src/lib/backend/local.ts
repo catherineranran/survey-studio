@@ -5,7 +5,7 @@
 import { uuid } from '../ids';
 import { normalizeSurvey } from '../templates';
 import type { PublicSurvey, ResponseData, Survey, SurveyRecord, SurveyResponse, SurveyStatus, SurveySummary } from '../types';
-import { BackendError, type Backend } from './types';
+import { BackendError, CONFLICT_MESSAGE, SHARING_NEEDS_DATABASE, type Backend } from './types';
 
 const SURVEYS_KEY = 'survey-studio.surveys.v1';
 const responsesKey = (id: string) => `survey-studio.responses.v1.${id}`;
@@ -64,6 +64,11 @@ export function createLocalBackend(): Backend {
     rec.updatedAt = now();
     saveAll(list);
     return clone(rec);
+  };
+  // Another window of this browser may have saved since this copy was loaded.
+  const checkBase = (id: string, base?: string) => {
+    const rec = all().find((r) => r.id === id);
+    if (rec && base && rec.updatedAt !== base) throw new BackendError(CONFLICT_MESSAGE, 'conflict');
   };
   const insertResponse = (surveyId: string, data: ResponseData): string => {
     const id = uuid();
@@ -130,13 +135,15 @@ export function createLocalBackend(): Backend {
       saveAll(list);
       return clone(rec);
     },
-    async saveDraft(id, def) {
+    async saveDraft(id, def, base) {
+      checkBase(id, base);
       return update(id, (r) => {
         r.definition = clone(def);
         r.title = def.title;
       }).updatedAt;
     },
-    async publish(id, def, status) {
+    async publish(id, def, status, base) {
+      checkBase(id, base);
       return update(id, (r) => {
         r.definition = clone(def);
         r.published = clone(def);
@@ -145,14 +152,31 @@ export function createLocalBackend(): Backend {
         r.status = status;
       });
     },
-    async setStatus(id, status: SurveyStatus) {
-      update(id, (r) => {
+    async setStatus(id, status: SurveyStatus, base) {
+      const current = !base || all().find((r) => r.id === id)?.updatedAt === base;
+      const at = update(id, (r) => {
         r.status = status;
-      });
+      }).updatedAt;
+      return current ? at : null;
     },
     async deleteSurvey(id) {
       saveAll(all().filter((r) => r.id !== id));
       store.remove(responsesKey(id));
+    },
+
+    // Collaborator links need a database other people can reach.
+    async listShareLinks() {
+      return [];
+    },
+    async createShareLink() {
+      throw new BackendError(SHARING_NEEDS_DATABASE, 'storage');
+    },
+    async deleteShareLink() {},
+    async getSharedSurvey() {
+      return null;
+    },
+    async saveSharedSurvey() {
+      throw new BackendError(SHARING_NEEDS_DATABASE, 'storage');
     },
 
     async getPublicSurvey(id): Promise<PublicSurvey | null> {

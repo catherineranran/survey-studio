@@ -40,14 +40,16 @@ function Admin() {
   if (path[0] === 'r' && path[1]) return <Respond surveyId={path[1]} />;
   if (fatal) return <p className="fatal">Survey Studio couldn’t start: {fatal}</p>;
   if (!backend || user === undefined) return <Spinner label="Starting Survey Studio" />;
-  if (backend.needsAuth && !user) return <Login backend={backend} />;
+  // Collaborator links (#/shared/<token>) open a survey's builder without an account.
+  const shared = path[0] === 'shared' && path[1] ? path[1] : null;
+  if (!shared && backend.needsAuth && !user) return <Login backend={backend} />;
 
   // The preview opens in its own window, without the app's header.
-  if (path[0] === 's' && path[1] && path[2] === 'preview')
+  if ((path[0] === 's' || shared) && path[1] && path[2] === 'preview')
     return (
       <BackendContext.Provider value={backend}>
         <ErrorBoundary label="The preview couldn’t be shown">
-          <PreviewWindow key={path[1]} surveyId={path[1]} />
+          {shared ? <PreviewWindow key={shared} shareToken={shared} /> : <PreviewWindow key={path[1]} surveyId={path[1]} />}
         </ErrorBoundary>
       </BackendContext.Provider>
     );
@@ -67,6 +69,10 @@ function Admin() {
                   <span className="mode-pill" title="Surveys and responses are stored in this browser">
                     Browser storage
                   </span>
+                ) : !user ? (
+                  <span className="mode-pill" title="You opened this survey through a link someone shared with you">
+                    Shared link
+                  </span>
                 ) : (
                   <>
                     <span className="mode-pill mode-cloud" title="Connected to your Supabase database">
@@ -77,7 +83,15 @@ function Admin() {
                 )}
               </div>
             </header>
-            <main className="app-main">{path[0] === 's' && path[1] ? <Workspace key={path[1]} id={path[1]} tab={path[2] ?? 'build'} /> : <Dashboard />}</main>
+            <main className="app-main">
+              {shared ? (
+                <Workspace key={shared} shareToken={shared} tab={path[2] ?? 'build'} />
+              ) : path[0] === 's' && path[1] ? (
+                <Workspace key={path[1]} id={path[1]} tab={path[2] ?? 'build'} />
+              ) : (
+                <Dashboard />
+              )}
+            </main>
           </div>
         </ConfirmProvider>
       </ToastProvider>

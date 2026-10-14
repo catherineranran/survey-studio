@@ -61,13 +61,17 @@ export function writePreviewPrefs(prefs: PreviewPrefs) {
   }
 }
 
-/** Hash route of the preview window, optionally starting at a block. */
-export function previewHash(id: string, fromBlockId?: string, nonce?: string): string {
+/**
+ * Hash route of the preview window, optionally starting at a block. Opened from a
+ * collaborator link, it goes through the link (#/shared/<token>/preview), which needs no account.
+ */
+export function previewHash(id: string, fromBlockId?: string, nonce?: string, shareToken?: string): string {
   const q = new URLSearchParams();
   if (fromBlockId) q.set('from', fromBlockId);
   if (nonce) q.set('t', nonce);
   const qs = q.toString();
-  return `#/s/${encodeURIComponent(id)}/preview${qs ? `?${qs}` : ''}`;
+  const base = shareToken ? `#/shared/${encodeURIComponent(shareToken)}` : `#/s/${encodeURIComponent(id)}`;
+  return `${base}/preview${qs ? `?${qs}` : ''}`;
 }
 
 export function previewWindowName(id: string): string {

@@ -108,6 +108,8 @@ export interface PreviewOptions {
   forced?: ForcedArms;
   /** Let the tester go on without answering required questions. */
   skipRequired?: boolean;
+  /** Don't keep the test response (collaborators can't store responses). */
+  discard?: boolean;
 }
 
 export interface RespondProps {
@@ -326,7 +328,11 @@ export function Respond({ surveyId, previewSurvey, previewOptions }: RespondProp
     };
     try {
       const backend = await getBackend();
-      const id = preview ? await backend.submitPreview(surveyId, data) : await backend.submitResponse(surveyId, data);
+      const id = !preview
+        ? await backend.submitResponse(surveyId, data)
+        : previewOptions?.discard
+          ? 'preview'
+          : await backend.submitPreview(surveyId, data);
       if (!preview) {
         storage.remove(progressKey(surveyId));
         if (rt.survey.settings.oneResponsePerBrowser) storage.set(doneKey(surveyId), new Date().toISOString());

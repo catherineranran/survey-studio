@@ -1,7 +1,7 @@
 import { createLocalBackend } from './local';
 import type { Backend } from './types';
 
-export type { Backend, AuthUser, SignupMode, SignupSettings } from './types';
+export type { Backend, AuthUser, ShareLink, ShareRole, SharedSurvey, SignupMode, SignupSettings } from './types';
 export { BackendError } from './types';
 
 declare global {

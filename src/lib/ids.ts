@@ -22,6 +22,16 @@ export function uuid(): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
+/** Unguessable key of a collaborator link: 24 random bytes as 32 URL-safe characters. */
+export function shareToken(): string {
+  const b = new Uint8Array(24);
+  crypto.getRandomValues(b);
+  return btoa(String.fromCharCode(...b))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
 /** Variable names that work in SPSS, R, Stata and spreadsheets. */
 export const VARIABLE_RE = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
 
