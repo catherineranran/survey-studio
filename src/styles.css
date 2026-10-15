@@ -1750,6 +1750,53 @@ input:focus-visible + .mark {
   color: var(--ink-3);
 }
 
+/* In the preview: where the run has been. */
+.outline-note {
+  padding: 8px 8px 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
+/* Shown already: a lighter mark than the block on screen. */
+.outline-item.is-visited:not(.is-current) > .outline-row .outline-num {
+  background: var(--form-tint);
+}
+
+.outline-item.is-skipped > .outline-row .outline-block {
+  color: var(--ink-3);
+  font-weight: 600;
+}
+
+.outline-tag {
+  flex: none;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 17px;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.outline-given {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 650;
+  color: var(--form);
+}
+
+.outline-arm.is-left-out {
+  opacity: 0.5;
+}
+
+.outline-arm.is-left-out:hover,
+.outline-arm.is-left-out:focus-within {
+  opacity: 1;
+}
+
 /* On narrower screens the outline opens over the page from the left. */
 .outline-drawer {
   position: fixed;
@@ -3781,6 +3828,10 @@ input:focus-visible + .mark {
   color: var(--ink-2);
 }
 
+.pw-field > span {
+  white-space: nowrap;
+}
+
 .pw-field select {
   max-width: 230px;
 }
@@ -3832,7 +3883,32 @@ input:focus-visible + .mark {
 
 .preview-scroll {
   flex: 1;
+  min-width: 0;
   overflow: auto;
+}
+
+/* The outline at the left of the preview, the survey next to it. */
+.pw-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.pw-side {
+  flex: none;
+  display: flex;
+  width: 272px;
+  min-height: 0;
+  background: var(--canvas);
+  border-right: 1px solid var(--line-2);
+}
+
+.pw-side .outline {
+  position: static;
+  flex: 1;
+  min-width: 0;
+  max-height: none;
+  padding: 12px 6px 0 12px;
 }
 
 .preview-frame {

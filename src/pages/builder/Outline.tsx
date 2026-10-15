@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon, IconButton, type IconName } from '../../components/ui';
 import { blockContents } from '../../lib/blocks';
+import type { RunOverview } from '../../lib/engine';
 import { flowSteps } from '../../lib/flow';
 import { questionLabel } from '../../lib/lint';
 import type { Block, Survey } from '../../lib/types';
@@ -18,6 +19,14 @@ interface OutlineProps {
   onHide: () => void;
   hideLabel: string;
   hideIcon?: IconName;
+  /**
+   * In the preview window: where the run is. The page on screen is highlighted, blocks shown
+   * or passed over are marked, and branches this run didn't get are dimmed. Clicking an
+   * entry starts the preview there.
+   */
+  run?: RunOverview | null;
+  /** A line under the heading. */
+  note?: ReactNode;
 }
 
 /**
@@ -88,12 +97,15 @@ export function OutlineView({
   onHide,
   hideLabel,
   hideIcon = 'sidebar',
+  run,
+  note,
 }: OutlineProps & { current: string | null }) {
   const listRef = useRef<HTMLDivElement>(null);
   const placed = useRef(false);
   const numbers = new Map(survey.blocks.map((b, i) => [b.id, i + 1]));
   const allFolded = survey.blocks.every((b) => folded.has(b.id));
   const noneFolded = !survey.blocks.some((b) => folded.has(b.id));
+  const preview = run !== undefined;
 
   // The block you're at stays in sight here too: straight there when the outline
   // opens, smoothly as you scroll on.
@@ -110,8 +122,9 @@ export function OutlineView({
   const block = (b: Block) => {
     const isFolded = folded.has(b.id);
     const title = b.title || 'Untitled block';
+    const mark = run?.marks[b.id];
     return (
-      <li key={b.id} data-block={b.id} className={`outline-item ${current === b.id ? 'is-current' : ''}`}>
+      <li key={b.id} data-block={b.id} className={['outline-item', current === b.id && 'is-current', mark && `is-${mark}`].filter(Boolean).join(' ')}>
         <div className="outline-row">
           <button
             type="button"
@@ -127,11 +140,16 @@ export function OutlineView({
             type="button"
             className={`outline-block ${sel?.kind === 'block' && sel.id === b.id ? 'is-active' : ''}`}
             aria-current={current === b.id ? 'location' : undefined}
-            title={title}
+            title={preview ? `Start the preview here: ${title}` : title}
             onClick={() => onBlock(b.id)}
           >
             <span className="outline-num">{numbers.get(b.id)}</span>
             <span className="outline-text">{title}</span>
+            {mark === 'skipped' && (
+              <span className="outline-tag" title="This run passed over it (display logic or skip logic)">
+                skipped
+              </span>
+            )}
             {b.displayLogic?.conditions.length ? <Icon name="logic" size={13} className="logic-ico" /> : null}
             {isFolded && (
               <span className="outline-count" title={blockContents(b)}>
@@ -151,8 +169,9 @@ export function OutlineView({
                 <li key={q.id}>
                   <button
                     type="button"
-                    className={`outline-q ${sel?.kind === 'question' && sel.id === q.id ? 'is-active' : ''}`}
-                    title={`${q.variable ? `${q.variable}: ` : ''}${questionLabel(q)}`}
+                    className={`outline-q ${(run ? run.onPage.includes(q.id) : sel?.kind === 'question' && sel.id === q.id) ? 'is-active' : ''}`}
+                    aria-current={run?.onPage.includes(q.id) ? 'step' : undefined}
+                    title={`${preview ? 'Start the preview at this page: ' : ''}${q.variable ? `${q.variable}: ` : ''}${questionLabel(q)}`}
                     onClick={() => onQuestion(q.id)}
                   >
                     <span className="outline-var">{q.variable || 'Text'}</span>
@@ -177,31 +196,44 @@ export function OutlineView({
         <IconButton icon="unfold" size="sm" label="Unfold all blocks" aria-disabled={noneFolded} onClick={() => !noneFolded && onFoldAll(false)} />
         <IconButton icon={hideIcon} size="sm" label={hideLabel} className="outline-hide" onClick={onHide} />
       </div>
+      {note && <p className="outline-note">{note}</p>}
       <div className="outline-list" ref={listRef}>
         <ol>
-          {flowSteps(survey).map((step) =>
-            step.kind === 'block' ? (
-              block(step.block)
-            ) : (
+          {flowSteps(survey).map((step) => {
+            if (step.kind === 'block') return block(step.block);
+            // In the preview: the branches this run got (the others are dimmed).
+            const given = run?.arms[step.randomizer.id];
+            const givenLabels = given?.map((id) => step.arms.find((a) => a.arm.id === id)?.arm.label || 'Unnamed branch');
+            return (
               <li key={step.randomizer.id} className="outline-rand">
-                <div className="outline-rand-head" title="Randomizer: respondents are assigned to its branches at random">
+                <div
+                  className="outline-rand-head"
+                  title={givenLabels ? `This run got: ${givenLabels.join(', ')}` : 'Randomizer: respondents are assigned to its branches at random'}
+                >
                   <Icon name="shuffle" size={13} />
                   <span className="outline-var">{step.randomizer.variable}</span>
-                  <span>{step.randomizer.present > 1 ? `${step.randomizer.present} branches each` : 'one branch each'}</span>
+                  {givenLabels ? (
+                    <span className="outline-given">= {givenLabels.join(', ')}</span>
+                  ) : (
+                    <span>{step.randomizer.present > 1 ? `${step.randomizer.present} branches each` : 'one branch each'}</span>
+                  )}
                 </div>
                 <ol>
-                  {step.arms.map(({ arm, blocks }) => (
-                    <li key={arm.id} className="outline-arm">
-                      {!(blocks.length === 1 && blocks[0].title.trim() === arm.label.trim()) && (
-                        <div className="outline-arm-label">{arm.label || 'Unnamed branch'}</div>
-                      )}
-                      {blocks.length ? <ol>{blocks.map(block)}</ol> : <p className="outline-none">Nothing shown</p>}
-                    </li>
-                  ))}
+                  {step.arms.map(({ arm, blocks }) => {
+                    const leftOut = !!given && !given.includes(arm.id);
+                    return (
+                      <li key={arm.id} className={`outline-arm ${leftOut ? 'is-left-out' : ''}`} title={leftOut ? 'Not in this run' : undefined}>
+                        {!(blocks.length === 1 && blocks[0].title.trim() === arm.label.trim()) && (
+                          <div className="outline-arm-label">{arm.label || 'Unnamed branch'}</div>
+                        )}
+                        {blocks.length ? <ol>{blocks.map(block)}</ol> : <p className="outline-none">Nothing shown</p>}
+                      </li>
+                    );
+                  })}
                 </ol>
               </li>
-            ),
-          )}
+            );
+          })}
         </ol>
       </div>
     </nav>

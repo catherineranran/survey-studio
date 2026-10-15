@@ -10,6 +10,8 @@ const OPTIONS_KEY = 'survey-studio.preview-options';
 export interface PreviewPrefs {
   skipRequired: boolean;
   device: 'desktop' | 'phone';
+  /** The outline at the left (on screens wide enough for it). */
+  outline: boolean;
 }
 
 export function isPreviewDraftKey(key: string | null, id: string): boolean {
@@ -42,11 +44,12 @@ export function readPreviewDraft(id: string): Survey | null {
 }
 
 export function readPreviewPrefs(): PreviewPrefs {
-  const prefs: PreviewPrefs = { skipRequired: true, device: 'desktop' };
+  const prefs: PreviewPrefs = { skipRequired: true, device: 'desktop', outline: true };
   try {
     const saved = JSON.parse(window.localStorage.getItem(OPTIONS_KEY) ?? '{}') as Partial<PreviewPrefs>;
     if (typeof saved.skipRequired === 'boolean') prefs.skipRequired = saved.skipRequired;
     if (saved.device === 'phone' || saved.device === 'desktop') prefs.device = saved.device;
+    if (typeof saved.outline === 'boolean') prefs.outline = saved.outline;
   } catch {
     /* defaults */
   }
@@ -62,12 +65,14 @@ export function writePreviewPrefs(prefs: PreviewPrefs) {
 }
 
 /**
- * Hash route of the preview window, optionally starting at a block. Opened from a
- * collaborator link, it goes through the link (#/shared/<token>/preview), which needs no account.
+ * Hash route of the preview window, optionally starting at a block (and at the page of one
+ * of its questions). Opened from a collaborator link, it goes through the link
+ * (#/shared/<token>/preview), which needs no account.
  */
-export function previewHash(id: string, fromBlockId?: string, nonce?: string, shareToken?: string): string {
+export function previewHash(id: string, fromBlockId?: string, nonce?: string, shareToken?: string, questionId?: string): string {
   const q = new URLSearchParams();
   if (fromBlockId) q.set('from', fromBlockId);
+  if (fromBlockId && questionId) q.set('q', questionId);
   if (nonce) q.set('t', nonce);
   const qs = q.toString();
   const base = shareToken ? `#/shared/${encodeURIComponent(shareToken)}` : `#/s/${encodeURIComponent(id)}`;

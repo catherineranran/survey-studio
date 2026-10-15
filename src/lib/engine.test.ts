@@ -12,7 +12,9 @@ import {
   pipe,
   pipeUrl,
   remainingPages,
+  runOverview,
   shuffle,
+  stepAtBlock,
   toNumber,
   validateAnswer,
   type Position,
@@ -236,6 +238,65 @@ describe('navigation', () => {
     const pages = pagesForBlock(b, makePlan(s, 1));
     expect(pages).toHaveLength(6);
     expect(pages.every((p) => p.questionIds.every((id) => id !== b.questions[breakAt].id))).toBe(true);
+  });
+
+  it('the preview can start at the page of a given question', () => {
+    const s = blankSurvey('s');
+    const b = s.blocks[0];
+    const [q1] = b.questions;
+    const q2 = createQuestion('short_text', s);
+    const q3 = createQuestion('short_text', s);
+    b.questions.push(createQuestion('page_break', s), q2, createQuestion('page_break', s), q3);
+    const plan = makePlan(s, 1);
+    const ctx = makeCtx(s);
+    expect(stepAtBlock(plan, ctx, b.id)).toEqual({ kind: 'page', pos: { block: 0, page: 0 } });
+    expect(stepAtBlock(plan, ctx, b.id, q3.id)).toEqual({ kind: 'page', pos: { block: 0, page: 2 } });
+    expect(stepAtBlock(plan, ctx, b.id, q1.id)).toEqual({ kind: 'page', pos: { block: 0, page: 0 } });
+    // A question from elsewhere: the block's first page.
+    expect(stepAtBlock(plan, ctx, b.id, 'nope')).toEqual({ kind: 'page', pos: { block: 0, page: 0 } });
+    b.pageMode = 'each';
+    expect(stepAtBlock(plan, ctx, b.id, q2.id)).toEqual({ kind: 'page', pos: { block: 0, page: 1 } });
+  });
+
+  it('tells the preview’s outline where the run is', () => {
+    const s = blankSurvey('s');
+    const [a] = s.blocks;
+    const hidden = newBlock(s, 'Hidden');
+    const c = newBlock(s, 'C');
+    const d = newBlock(s, 'D');
+    hidden.questions.push(createQuestion('short_text', s));
+    c.questions.push(createQuestion('short_text', s), createQuestion('short_text', s));
+    d.questions.push(createQuestion('short_text', s));
+    hidden.displayLogic = { match: 'all', conditions: [{ id: 'c', source: a.questions[0].id, operator: 'answered' }] };
+    s.blocks.push(hidden, c, d);
+    const plan = makePlan(s, 1);
+    const ctx = makeCtx(s);
+    const history: Position[] = [{ block: 0, page: 0 }];
+    const step = nextStep(plan, ctx, history[0]);
+    expect(step).toEqual({ kind: 'page', pos: { block: 2, page: 0 } });
+    history.push((step as { pos: Position }).pos);
+
+    const on = runOverview(plan, ctx, history, false);
+    expect(on.current).toBe(c.id);
+    expect(on.onPage).toEqual(c.questions.map((q) => q.id));
+    expect(on.marks).toEqual({ [a.id]: 'visited', [hidden.id]: 'skipped', [c.id]: 'visited' });
+
+    // After the end, nothing is on screen and every block the run didn't show was skipped.
+    const ended = runOverview(plan, ctx, history, true);
+    expect(ended.current).toBeNull();
+    expect(ended.onPage).toEqual([]);
+    expect(ended.marks[d.id]).toBe('skipped');
+
+    // Started at a later block: what comes before it isn't marked; the welcome page shows nothing yet.
+    expect(runOverview(plan, ctx, [{ block: 2, page: 0 }], false).marks).toEqual({ [c.id]: 'visited' });
+    expect(runOverview(plan, ctx, [], false)).toMatchObject({ current: null, onPage: [], marks: {} });
+  });
+
+  it('knows which randomizer branches a run got', () => {
+    const s = build('experiment');
+    const r = s.randomizers[0];
+    const plan = makePlan(s, 5, {}, { [r.id]: [r.arms[1].id] });
+    expect(runOverview(plan, makeCtx(s), [], false).arms).toEqual({ [r.id]: [r.arms[1].id] });
   });
 
   it('shows follow-up questions depending on an NPS score', () => {

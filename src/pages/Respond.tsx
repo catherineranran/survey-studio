@@ -15,6 +15,7 @@ import {
   pipeUrl,
   randomSeed,
   remainingPages,
+  runOverview,
   stepAtBlock,
   validateAnswer,
   videoAnswer,
@@ -24,6 +25,7 @@ import {
   type ForcedArms,
   type Plan,
   type Position,
+  type RunOverview,
 } from '../lib/engine';
 import { respondentStyle } from '../lib/appearance';
 import { t } from '../lib/i18n';
@@ -100,10 +102,14 @@ function browserLang(): Lang {
   return typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('de') ? 'de' : 'en';
 }
 
-/** Testing tools of the preview window. Read when the run starts, except skipRequired. */
+/** Testing tools of the preview window. Read when the run starts, except skipRequired and onRun. */
 export interface PreviewOptions {
   /** Start on this block's first page, as if arriving there (no earlier answers). */
   startBlockId?: string;
+  /** Start on the page of the start block that has this question instead. */
+  startQuestionId?: string;
+  /** Told where the run is after every step (null until it has started). */
+  onRun?: (run: RunOverview | null) => void;
   /** Give these randomizer branches instead of drawing them. */
   forced?: ForcedArms;
   /** Let the tester go on without answering required questions. */
@@ -209,7 +215,7 @@ export function Respond({ surveyId, previewSurvey, previewOptions }: RespondProp
         const startId = preview && survey.blocks.some((b) => b.id === previewOptions?.startBlockId) ? previewOptions!.startBlockId! : undefined;
         const forceVisible = startId ? [startId] : undefined;
         const ctx: Ctx = { index: indexSurvey(survey), answers: {}, otherText: {}, embedded, lang: survey.settings.language, forceVisible };
-        const first = (startId && stepAtBlock(plan, ctx, startId)) || firstStep(plan, ctx);
+        const first = (startId && stepAtBlock(plan, ctx, startId, previewOptions?.startQuestionId)) || firstStep(plan, ctx);
         setRt({
           survey,
           plan,
@@ -268,6 +274,15 @@ export function Respond({ surveyId, previewSurvey, previewOptions }: RespondProp
   const pos = rt?.history[rt.history.length - 1];
   const page = rt && ectx && pos ? pageAt(rt.plan, ectx, pos) : null;
   const questions = page && ectx ? visibleQuestions(page, ectx) : [];
+
+  /* ------------------------------------- the preview window's outline */
+  const onRun = useRef(previewOptions?.onRun);
+  onRun.current = previewOptions?.onRun;
+  useEffect(() => {
+    if (!preview || !onRun.current) return;
+    const started = phase.kind === 'page' || phase.kind === 'done';
+    onRun.current(rt && ectx ? runOverview(rt.plan, ectx, started ? rt.history : [], phase.kind === 'done') : null);
+  }, [preview, rt, ectx, phase.kind]);
 
   const focusTop = useCallback(() => {
     requestAnimationFrame(() => {

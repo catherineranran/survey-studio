@@ -89,4 +89,44 @@ describe('outline', () => {
     expect(state(all, 'Fold all blocks')).toBe('true');
     expect(state(all, 'Unfold all blocks')).toBe('false');
   });
+
+  it('in the preview, follows the run: page on screen, blocks shown or skipped, branches not given', () => {
+    const { s, b } = study();
+    const r = s.randomizers[0];
+    const vignetteArm = r.arms.find((a) => a.blockIds.includes(b.Vignette.id))!;
+    const videoArm = r.arms.find((a) => a.blockIds.includes(b.Video.id))!;
+    const run = {
+      current: b.Questions.id,
+      onPage: [b.Questions.questions[0].id],
+      marks: { [b.Intro.id]: 'visited', [b.Vignette.id]: 'skipped', [b.Questions.id]: 'visited' } as const,
+      arms: { [r.id]: [vignetteArm.id] },
+    };
+    const html = renderToStaticMarkup(
+      <OutlineView
+        survey={s}
+        folded={new Set()}
+        sel={null}
+        current={run.current}
+        run={run}
+        note="Click a block or question to start the preview there."
+        onToggleFold={() => {}}
+        onFoldAll={() => {}}
+        onBlock={() => {}}
+        onQuestion={() => {}}
+        onHide={() => {}}
+        hideLabel="Hide outline"
+      />,
+    );
+    expect(html).toContain('outline-note');
+    expect(html).toMatch(/class="outline-item is-visited"[^>]*>[^]*?>Intro</);
+    expect(html).toMatch(/class="outline-item is-skipped"[^>]*>[^]*?>Vignette<[^]*?>skipped</);
+    expect(html).toMatch(/class="outline-item is-current is-visited"/);
+    // The question on screen is highlighted.
+    expect(html).toMatch(/class="outline-q is-active" aria-current="step"[^>]*>[^]*?q_questions/);
+    // The randomizer says what this run got; the other branch is dimmed.
+    expect(html).toContain(`= ${vignetteArm.label}`);
+    expect(html).toMatch(new RegExp(`class="outline-arm is-left-out"[^>]*>[^]*?data-block="${b.Video.id}"`));
+    expect(videoArm.id).not.toBe(vignetteArm.id);
+    expect(html).toContain('title="Start the preview here: Intro"');
+  });
 });

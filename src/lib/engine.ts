@@ -451,13 +451,17 @@ export function effectiveCtx(plan: Plan, ctx: Ctx, history: Position[]): Ctx {
   return { ...ctx, answers: effectiveAnswers(plan, ctx, history) };
 }
 
-/** Preview: the first page of a given block, as if the respondent had just arrived there. */
-export function stepAtBlock(plan: Plan, ctx: Ctx, blockId: string): Step | null {
+/**
+ * Preview: the first page of a given block, as if the respondent had just arrived there,
+ * or the page of that block with a given question.
+ */
+export function stepAtBlock(plan: Plan, ctx: Ctx, blockId: string, questionId?: string): Step | null {
   const bi = plan.blockOrder.indexOf(blockId);
   const block = ctx.index.blocks.get(blockId);
   if (bi < 0 || !block) return null;
   const pages = pagesForBlock(block, plan);
-  const pi = pages.findIndex((p) => visibleQuestions(p, ctx).length > 0);
+  const withQuestion = questionId ? pages.findIndex((p) => p.questionIds.includes(questionId)) : -1;
+  const pi = withQuestion >= 0 ? withQuestion : pages.findIndex((p) => visibleQuestions(p, ctx).length > 0);
   return { kind: 'page', pos: { block: bi, page: Math.max(0, pi) } };
 }
 
@@ -518,6 +522,41 @@ export function remainingPages(plan: Plan, ctx: Ctx, pos: Position): number {
     step = nextStep(plan, ctx, step.pos);
   }
   return n;
+}
+
+/** Where a preview run is, for the outline next to it. */
+export interface RunOverview {
+  /** The block of the page on screen; null on the welcome page and once the run has ended. */
+  current: string | null;
+  /** The questions shown on the page on screen. */
+  onPage: string[];
+  /**
+   * Blocks this run has shown ('visited'), and blocks it passed over on the way, hidden by
+   * their display logic or jumped over by skip logic ('skipped'). Blocks before the one the
+   * run started at, and blocks still ahead, have no mark. After the end, every block the
+   * run didn't show counts as skipped.
+   */
+  marks: Record<string, 'visited' | 'skipped'>;
+  /** Randomizer id -> the branches this run got. */
+  arms: Record<string, string[]>;
+}
+
+/** The pages in `history` have been shown (the last one is on screen, unless the run has `ended`). */
+export function runOverview(plan: Plan, ctx: Ctx, history: Position[], ended: boolean): RunOverview {
+  const marks: RunOverview['marks'] = {};
+  const shown = new Set(history.map((p) => p.block));
+  const pos = history[history.length - 1];
+  if (pos) {
+    const to = ended ? plan.blockOrder.length - 1 : pos.block;
+    for (let i = Math.min(...shown); i <= to; i++) marks[plan.blockOrder[i]] = shown.has(i) ? 'visited' : 'skipped';
+  }
+  const page = pos && !ended ? pageAt(plan, ctx, pos) : null;
+  return {
+    current: pos && !ended ? plan.blockOrder[pos.block] : null,
+    onPage: page ? visibleQuestions(page, ctx).map((q) => q.id) : [],
+    marks,
+    arms: plan.armChoices ?? {},
+  };
 }
 
 /* -------------------------------------------------------------- validation */
