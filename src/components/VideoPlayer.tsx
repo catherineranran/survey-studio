@@ -194,6 +194,10 @@ export function VideoPlayer({ settings, lang, value, onChange, labelledBy }: Vid
   const [ended, setEnded] = useState(false);
   const [muted, setMuted] = useState(false);
   const [full, setFull] = useState<'off' | 'native' | 'fill'>('off');
+  // The window was filled because the video started (`fillWindow`), so the end gives the page back.
+  const autoFilled = useRef(false);
+  const showNext = useRef(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   const [time, setTime] = useState({ now: 0, total: 0 });
   const [buffering, setBuffering] = useState(false);
   const [touch] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches);
@@ -314,6 +318,12 @@ export function VideoPlayer({ settings, lang, value, onChange, labelledBy }: Vid
       setEnded(true);
       setPlaying(false);
       report(true);
+      if (autoFilled.current) {
+        // Back on the page, with the button to continue in view (once the page is back).
+        autoFilled.current = false;
+        showNext.current = true;
+        setFull((f) => (f === 'fill' ? 'off' : f));
+      }
     };
     const onError = () => {
       if (!v.getAttribute('src')) return;
@@ -533,6 +543,11 @@ export function VideoPlayer({ settings, lang, value, onChange, labelledBy }: Vid
   const play = () => {
     const v = videoRef.current!;
     enableTilt();
+    // Starting (or starting again after the end) fills the window, if the question asks for it.
+    if (settings.fillWindow && full === 'off' && (!started || ended || v.ended)) {
+      autoFilled.current = true;
+      setFull('fill');
+    }
     if (v.ended) v.currentTime = 0;
     v.play().catch(() => setPlaying(false));
   };
@@ -576,18 +591,29 @@ export function VideoPlayer({ settings, lang, value, onChange, labelledBy }: Vid
   }, []);
   useEffect(() => {
     if (full !== 'fill') return;
-    const onKey = (e: globalThis.KeyboardEvent) => e.key === 'Escape' && setFull('off');
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      autoFilled.current = false;
+      setFull('off');
+    };
     document.body.classList.add('vp-filled');
     window.addEventListener('keydown', onKey);
+    // The button that started it is gone; keep the keys working (arrows look around, space pauses).
+    (canvasRef.current ?? toggleRef.current)?.focus({ preventScroll: true });
     return () => {
       document.body.classList.remove('vp-filled');
       window.removeEventListener('keydown', onKey);
+      if (showNext.current) {
+        showNext.current = false;
+        rootRef.current?.closest('form')?.querySelector<HTMLElement>('[type="submit"]')?.scrollIntoView({ block: 'nearest' });
+      }
     };
   }, [full]);
   const toggleFull = () => {
     const el = rootRef.current as (HTMLDivElement & { webkitRequestFullscreen?: () => void }) | null;
     const doc = document as Document & { webkitExitFullscreen?: () => void };
     if (!el) return;
+    autoFilled.current = false;
     if (full === 'native') {
       if (doc.exitFullscreen) void doc.exitFullscreen().catch(() => {});
       else doc.webkitExitFullscreen?.();
@@ -709,7 +735,7 @@ export function VideoPlayer({ settings, lang, value, onChange, labelledBy }: Vid
         )}
       </div>
       <div className="vp-bar">
-        <button type="button" className="vp-btn" onClick={toggle} disabled={!ready}>
+        <button ref={toggleRef} type="button" className="vp-btn" onClick={toggle} disabled={!ready}>
           {t(lang, playing ? 'videoPause' : 'videoResume')}
         </button>
         <button type="button" className="vp-btn" onClick={restart} disabled={!ready || !started}>

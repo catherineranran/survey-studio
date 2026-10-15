@@ -211,7 +211,7 @@ export function createQuestion(type: QuestionType, survey: Survey): Question {
       return { ...base, title: t.textTitle, description: t.textBody };
     case 'video':
       // Required: respondents continue once they've watched it to the end.
-      return { ...base, title: t.videoTitle, required: true, video: { src: '', view: 'wrap', span: 180, fov: 90, tilt: false } };
+      return { ...base, title: t.videoTitle, required: true, video: { src: '', view: 'wrap', span: 180, fov: 90, tilt: false, fillWindow: true } };
     case 'page_break':
       return { ...base, title: '' };
   }

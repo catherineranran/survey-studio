@@ -120,6 +120,12 @@ export interface VideoSettings {
   reach?: number;
   /** wrap: on phones and tablets, moving the device looks around too. */
   tilt?: boolean;
+  /**
+   * When it starts playing (the first time, or again after the end), the player fills the
+   * browser window; when it ends it goes back to its place on the page, where respondents
+   * continue. Unset: it stays on the page unless respondents choose Full screen.
+   */
+  fillWindow?: boolean;
 }
 
 /** What a video question records for each respondent. */

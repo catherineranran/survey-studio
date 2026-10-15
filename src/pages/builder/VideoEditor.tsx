@@ -115,6 +115,12 @@ export function VideoEditor({ q, change }: { q: Question; change: QMutate }) {
           />
         </>
       )}
+      <Toggle
+        label="Fill the window while it plays"
+        hint="Starting the video enlarges it to the whole browser window. When it ends, it goes back to its place on the page, where respondents continue. Esc or “Exit full screen” makes it smaller earlier."
+        checked={!!v.fillWindow}
+        onChange={(on) => set({ fillWindow: on })}
+      />
       <p className="hint">
         {q.required
           ? 'Respondents can continue once they’ve watched it to the end (or if it can’t play on their device).'

@@ -3993,6 +3993,11 @@ input:focus-visible + .mark {
   padding-top: 8px;
 }
 
+/* Brought into view when a video that filled the window ends: not flush with the edge. */
+.respond-nav [type='submit'] {
+  scroll-margin-bottom: 28px;
+}
+
 .error-summary {
   display: flex;
   gap: 10px;
@@ -5023,6 +5028,11 @@ body.vp-filled {
 
 .vp-placeholder-title {
   font-weight: 650;
+}
+
+.vp-placeholder-note {
+  font-size: 13.5px;
+  color: #b9c7d8;
 }
 
 .vp-placeholder-src {

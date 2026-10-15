@@ -46,6 +46,25 @@ describe('magic window view', () => {
     expect(deg(limited.hSpan)).toBeCloseTo(180, 6);
   });
 
+  it('shows the same 85 % of 140° on any screen, whether the picture spans 140° or 180°', () => {
+    for (const aspect of [1.6, 1.25, 0.75]) {
+      const limited = geometry(180, 119, 1, aspect, 140);
+      const narrow = geometry(140, 119, 1, aspect);
+      expect(deg(Math.atan(limited.tanH) * 2)).toBeCloseTo(119, 6); // the view isn't narrowed
+      expect(limited.tanV).toBeCloseTo(narrow.tanV, 9);
+      for (const [y, p] of [
+        [5, 0],
+        [0, 5],
+        [-5, -5],
+      ]) {
+        const a = clampView(limited, y, p);
+        const b = clampView(narrow, y, p);
+        expect(deg(a[0])).toBeCloseTo(deg(b[0]), 6);
+        expect(deg(a[1])).toBeCloseTo(deg(b[1]), 6);
+      }
+    }
+  });
+
   it('goes all the way round a 360° picture', () => {
     const g = geometry(360, 90, 2, 16 / 10);
     const [yaw] = clampView(g, Math.PI * 1.5, 0);
