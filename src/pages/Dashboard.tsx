@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Dialog, Empty, Field, Icon, Menu, Spinner, downloadFile, relativeTime, useConfirm, useToast } from '../components/ui';
+import { BIN_DAYS } from '../lib/backend';
 import { useBackend } from '../lib/backend/context';
 import { forgetSurveyView } from '../lib/builderView';
 import { fileSlug } from '../lib/export';
@@ -15,6 +16,7 @@ export function Dashboard() {
   const toast = useToast();
   const confirm = useConfirm();
   const [list, setList] = useState<SurveySummary[] | null>(null);
+  const [bin, setBin] = useState<SurveySummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [signup, setSignup] = useState<SignupSettings | null>(null);
@@ -32,6 +34,10 @@ export function Dashboard() {
       .listSurveys()
       .then(setList)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    backend
+      .listDeletedSurveys()
+      .then(setBin)
+      .catch(() => setBin([]));
   };
   useEffect(load, [backend]);
 
@@ -63,18 +69,47 @@ export function Dashboard() {
 
   const remove = async (s: SurveySummary) => {
     const ok = await confirm({
-      title: `Delete “${s.title}”?`,
-      message: s.responseCount
-        ? `The survey and its ${s.responseCount} response${s.responseCount === 1 ? '' : 's'} will be deleted for good. Export the data first if you need it.`
-        : 'The survey will be deleted for good.',
-      confirmLabel: 'Delete survey',
+      title: `Move “${s.title}” to the bin?`,
+      message: `Its links stop working while it’s in the bin. You can restore it, with its responses, for ${BIN_DAYS} days; after that it’s deleted for good.`,
+      confirmLabel: 'Move to bin',
       danger: true,
     });
     if (!ok) return;
-    await backend
-      .deleteSurvey(s.id)
-      .then(() => forgetSurveyView(s.id))
-      .catch((e) => toast(e.message, 'error'));
+    try {
+      await backend.deleteSurvey(s.id);
+      toast(`“${s.title}” is in the bin. Restore it there if you need it again.`, 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error');
+    }
+    load();
+  };
+
+  const restore = async (s: SurveySummary) => {
+    try {
+      await backend.restoreSurvey(s.id);
+      toast(`“${s.title}” is back`, 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error');
+    }
+    load();
+  };
+
+  const purge = async (s: SurveySummary) => {
+    const ok = await confirm({
+      title: `Delete “${s.title}” for good?`,
+      message: s.responseCount
+        ? `The survey and its ${s.responseCount} response${s.responseCount === 1 ? '' : 's'} are deleted at once and can’t be brought back. Export the data first if you need it.`
+        : 'The survey is deleted at once and can’t be brought back.',
+      confirmLabel: 'Delete for good',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await backend.purgeSurvey(s.id);
+      forgetSurveyView(s.id);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error');
+    }
     load();
   };
 
@@ -192,7 +227,7 @@ export function Dashboard() {
                       { label: 'Share', icon: 'link', onSelect: () => navigate(`/s/${s.id}/share`) },
                       { label: 'Duplicate', icon: 'copy', onSelect: () => void duplicate(s) },
                       { label: 'Download as JSON', icon: 'download', onSelect: () => void exportDef(s) },
-                      { label: 'Delete', icon: 'trash', danger: true, onSelect: () => void remove(s) },
+                      { label: 'Move to bin', icon: 'trash', danger: true, onSelect: () => void remove(s) },
                     ]}
                   />
                 </td>
@@ -202,10 +237,47 @@ export function Dashboard() {
         </table>
       )}
 
+      {bin.length > 0 && (
+        <details className="bin">
+          <summary>
+            <Icon name="trash" size={16} />
+            <span>
+              Bin <span className="bin-count">{bin.length}</span>
+            </span>
+            <span className="hint">Deleted surveys stay here for {BIN_DAYS} days.</span>
+          </summary>
+          <ul className="bin-list">
+            {bin.map((s) => (
+              <li key={s.id}>
+                <div className="bin-text">
+                  <strong>{s.title}</strong>
+                  <span className="hint">
+                    Deleted {s.deletedAt ? relativeTime(s.deletedAt) : ''}
+                    {s.responseCount ? ` · ${s.responseCount} response${s.responseCount === 1 ? '' : 's'}` : ''}
+                    {s.deletedAt ? ` · deleted for good on ${purgeDate(s.deletedAt)}` : ''}
+                  </span>
+                </div>
+                <Button size="sm" icon="undo" onClick={() => void restore(s)}>
+                  Restore
+                </Button>
+                <Button size="sm" variant="ghost" icon="trash" onClick={() => void purge(s)}>
+                  Delete for good
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       <NewSurveyDialog open={creating} onClose={() => setCreating(false)} onCreate={create} />
       {signup && <InviteDialog backend={backend} open={inviting} onClose={() => setInviting(false)} initial={signup} />}
     </div>
   );
+}
+
+/** When a survey that went into the bin at `deletedAt` is deleted for good, e.g. "14 Nov". */
+function purgeDate(deletedAt: string): string {
+  return new Date(Date.parse(deletedAt) + BIN_DAYS * 86_400_000).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
 function NewSurveyDialog({ open, onClose, onCreate }: { open: boolean; onClose: () => void; onCreate: (template: string, title: string) => void }) {

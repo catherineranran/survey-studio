@@ -30,26 +30,26 @@ afterEach(() => {
 });
 
 describe('folded blocks', () => {
-  it('are remembered per survey', () => {
+  it('are remembered per survey; a survey never opened here has nothing remembered (so it starts folded)', () => {
     writeFolded('s1', ['b1', 'b3']);
     expect(readFolded('s1')).toEqual(['b1', 'b3']);
-    expect(readFolded('s2')).toEqual([]);
+    expect(readFolded('s2')).toBeNull();
   });
 
-  it('leave nothing behind once everything is unfolded, or the survey is deleted', () => {
+  it('remember “everything unfolded” too, and are forgotten when the survey is deleted for good', () => {
     writeFolded('s1', ['b1']);
     writeFolded('s1', []);
-    expect(store.has('survey-studio.folded.s1')).toBe(false);
-    writeFolded('s1', ['b1']);
-    forgetSurveyView('s1');
     expect(readFolded('s1')).toEqual([]);
+    forgetSurveyView('s1');
+    expect(store.has('survey-studio.folded.s1')).toBe(false);
+    expect(readFolded('s1')).toBeNull();
   });
 
   it('ignore whatever else is stored there', () => {
     store.setItem('survey-studio.folded.s1', 'not json');
-    expect(readFolded('s1')).toEqual([]);
+    expect(readFolded('s1')).toBeNull();
     store.setItem('survey-studio.folded.s1', '{"b1":true}');
-    expect(readFolded('s1')).toEqual([]);
+    expect(readFolded('s1')).toBeNull();
     store.setItem('survey-studio.folded.s1', '["b1", 3, null]');
     expect(readFolded('s1')).toEqual(['b1']);
   });
@@ -60,8 +60,9 @@ describe('folded blocks', () => {
         throw new Error('SecurityError');
       },
     };
-    expect(readFolded('s1')).toEqual([]);
+    expect(readFolded('s1')).toBeNull();
     expect(() => writeFolded('s1', ['b1'])).not.toThrow();
+    expect(() => forgetSurveyView('s1')).not.toThrow();
     expect(readOutlineShown()).toBe(true);
     expect(() => writeOutlineShown(false)).not.toThrow();
   });

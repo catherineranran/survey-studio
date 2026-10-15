@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Dialog, Empty, ErrorBoundary, Icon, IconButton, Spinner, useToast } from '../components/ui';
-import { BackendError, type ShareRole } from '../lib/backend';
+import { BIN_DAYS, BackendError, type ShareRole } from '../lib/backend';
 import { useBackend } from '../lib/backend/context';
 import { lintSurvey, type Issue } from '../lib/lint';
 import { previewHash, previewWindowName, writePreviewDraft } from '../lib/preview';
@@ -292,6 +292,38 @@ export function Workspace({ id: idProp, shareToken, tab }: { id?: string; shareT
             <p>It may have been deleted, or it belongs to another account.</p>
           </Empty>
         )}
+      </div>
+    );
+
+  if (record.deletedAt && !shareToken)
+    return (
+      <div className="page-narrow">
+        <Empty
+          title="This survey is in the bin"
+          action={
+            <div className="page-actions">
+              <Button
+                variant="primary"
+                icon="undo"
+                onClick={async () => {
+                  try {
+                    await backend.restoreSurvey(id);
+                    const res = await load();
+                    if (res) adopt(res.rec);
+                    toast('Survey restored', 'success');
+                  } catch (e) {
+                    toast(errorText(e), 'error');
+                  }
+                }}
+              >
+                Restore it
+              </Button>
+              <Button onClick={() => navigate('/')}>Back to surveys</Button>
+            </div>
+          }
+        >
+          <p>Its links don’t work while it’s there. Restore it to open it again; surveys in the bin are deleted for good after {BIN_DAYS} days.</p>
+        </Empty>
       </div>
     );
 

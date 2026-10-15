@@ -385,7 +385,18 @@ export interface MenuItem {
 
 export function Menu({ items, label = 'More actions', icon = 'more', align = 'end' }: { items: (MenuItem | null | false | undefined)[]; label?: string; icon?: IconName; align?: 'start' | 'end' }) {
   const [open, setOpen] = useState(false);
+  // Opens upwards when there isn't room below it on the screen, so no item is cut off.
+  const [up, setUp] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!open) return setUp(false);
+    const btn = ref.current?.getBoundingClientRect();
+    const height = popRef.current?.offsetHeight ?? 0;
+    if (!btn) return;
+    const below = window.innerHeight - btn.bottom;
+    setUp(below < height + 12 && btn.top > below);
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
@@ -415,7 +426,7 @@ export function Menu({ items, label = 'More actions', icon = 'more', align = 'en
         }}
       />
       {open && (
-        <div className={`menu-pop menu-${align}`} role="menu" onClick={(e) => e.stopPropagation()}>
+        <div ref={popRef} className={`menu-pop menu-${align} ${up ? 'menu-up' : ''}`} role="menu" onClick={(e) => e.stopPropagation()}>
           {list.map((it) => (
             <button
               key={it.label}

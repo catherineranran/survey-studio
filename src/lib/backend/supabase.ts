@@ -6,7 +6,7 @@ import { createClient, type SupabaseClient, type User } from '@supabase/supabase
 import { shareToken } from '../ids';
 import { normalizeSurvey } from '../templates';
 import type { PublicSurvey, ResponseData, Survey, SurveyRecord, SurveyResponse, SurveyStatus, SurveySummary } from '../types';
-import { BackendError, CONFLICT_MESSAGE, type AuthUser, type Backend, type ShareLink, type ShareRole, type SignupMode, type SignupSettings } from './types';
+import { BackendError, CONFLICT_MESSAGE, binCutoff, type AuthUser, type Backend, type ShareLink, type ShareRole, type SignupMode, type SignupSettings } from './types';
 
 interface SurveyRow {
   id: string;
@@ -17,6 +17,7 @@ interface SurveyRow {
   published_at: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
 }
 
 interface ResponseRow {
@@ -60,6 +61,7 @@ function toRecord(r: SurveyRow): SurveyRecord {
     publishedAt: r.published_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    deletedAt: r.deleted_at ?? null,
   };
 }
 
@@ -77,10 +79,27 @@ function toResponse(r: ResponseRow): SurveyResponse {
   };
 }
 
+type SummaryRow = Pick<SurveyRow, 'id' | 'title' | 'status' | 'updated_at' | 'published_at' | 'deleted_at'>;
+
 export function createSupabaseBackend(url: string, anonKey: string): Backend {
   const sb: SupabaseClient = createClient(url, anonKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
   });
+
+  const summaries = async (rows: SummaryRow[]): Promise<SurveySummary[]> => {
+    const counts = new Map<string, number>();
+    const { data: c } = await sb.rpc('my_response_counts');
+    for (const row of (c ?? []) as { survey_id: string; n: number }[]) counts.set(row.survey_id, Number(row.n));
+    return rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      status: r.status,
+      updatedAt: r.updated_at,
+      publishedAt: r.published_at,
+      responseCount: counts.get(r.id) ?? 0,
+      deletedAt: r.deleted_at ?? null,
+    }));
+  };
 
   return {
     mode: 'supabase',
@@ -131,19 +150,34 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
     },
 
     async listSurveys(): Promise<SurveySummary[]> {
-      const { data, error } = await sb.from('surveys').select('id,title,status,updated_at,published_at').order('updated_at', { ascending: false });
+      const columns = 'id,title,status,updated_at,published_at';
+      let { data, error } = await sb.from('surveys').select(columns).is('deleted_at', null).order('updated_at', { ascending: false });
+      // A database from before the bin has no deleted_at column yet.
+      if (error && /deleted_at/.test(error.message)) ({ data, error } = await sb.from('surveys').select(columns).order('updated_at', { ascending: false }));
       if (error) fail(error);
-      const counts = new Map<string, number>();
-      const { data: c } = await sb.rpc('my_response_counts');
-      for (const row of (c ?? []) as { survey_id: string; n: number }[]) counts.set(row.survey_id, Number(row.n));
-      return (data ?? []).map((r) => ({
-        id: r.id,
-        title: r.title,
-        status: r.status,
-        updatedAt: r.updated_at,
-        publishedAt: r.published_at,
-        responseCount: counts.get(r.id) ?? 0,
-      }));
+      return summaries((data ?? []) as SummaryRow[]);
+    },
+    async listDeletedSurveys(): Promise<SurveySummary[]> {
+      // Deleted for good once they've been in the bin long enough.
+      await sb.from('surveys').delete().lt('deleted_at', binCutoff());
+      const { data, error } = await sb
+        .from('surveys')
+        .select('id,title,status,updated_at,published_at,deleted_at')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false });
+      if (error) {
+        if (/deleted_at/.test(error.message)) return [];
+        fail(error);
+      }
+      return summaries((data ?? []) as SummaryRow[]);
+    },
+    async restoreSurvey(id) {
+      const { error } = await sb.from('surveys').update({ deleted_at: null }).eq('id', id);
+      if (error) fail(error);
+    },
+    async purgeSurvey(id) {
+      const { error } = await sb.from('surveys').delete().eq('id', id);
+      if (error) fail(error);
     },
     async getSurvey(id) {
       const { data, error } = await sb.from('surveys').select('*').eq('id', id).maybeSingle();
@@ -185,7 +219,7 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
       return base ? null : (data as { updated_at: string }).updated_at;
     },
     async deleteSurvey(id) {
-      const { error } = await sb.from('surveys').delete().eq('id', id);
+      const { error } = await sb.from('surveys').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) fail(error);
     },
 

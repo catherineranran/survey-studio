@@ -76,7 +76,16 @@ export interface Backend {
    * since `base` (so the caller keeps its older `base` and a later save still notices).
    */
   setStatus(id: string, status: SurveyStatus, base?: string): Promise<string | null>;
+  /**
+   * Moves a survey to the bin. While it's there its respondent and collaborator links
+   * don't work; restoring brings everything back, responses included.
+   */
   deleteSurvey(id: string): Promise<void>;
+  /** The bin, most recently deleted first. Surveys deleted over BIN_DAYS ago are deleted for good on the way. */
+  listDeletedSurveys(): Promise<SurveySummary[]>;
+  restoreSurvey(id: string): Promise<void>;
+  /** Deletes a survey and its responses for good. */
+  purgeSurvey(id: string): Promise<void>;
 
   /** Owners: the collaborator links of a survey. */
   listShareLinks(surveyId: string): Promise<ShareLink[]>;
@@ -99,6 +108,10 @@ export interface Backend {
   listResponses(surveyId: string): Promise<SurveyResponse[]>;
   deleteResponses(surveyId: string, ids: string[]): Promise<void>;
 }
+
+/** How long deleted surveys stay in the bin. */
+export const BIN_DAYS = 30;
+export const binCutoff = (now = Date.now()) => new Date(now - BIN_DAYS * 86_400_000).toISOString();
 
 export const CONFLICT_MESSAGE = 'Someone else saved this survey in the meantime.';
 export const SHARING_NEEDS_DATABASE = 'Sharing with collaborators needs the Supabase database.';

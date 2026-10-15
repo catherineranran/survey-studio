@@ -105,6 +105,8 @@ GitHub Pages needs a **public** repository on the free plan. If you want to keep
 
 **Sharing the survey with colleagues.** In the Share tab, *Share with collaborators* makes links that open the survey in the builder, no account needed: a *view-only* link (look around and preview) or an *edit* link (also change questions, blocks and settings; the changes are saved to your survey). People with these links never see responses, can't publish, and can't share further; their previews don't keep test answers. Anyone who has a link has its access, so send it only to people you trust. *Turn off* stops a link at once; a new link is always a different one. This needs the Supabase database (run the latest `supabase/schema.sql` once after updating).
 
+**The bin.** *Move to bin* on the dashboard doesn't delete a survey straight away: it goes to the *Bin* below your surveys for 30 days, with its responses and links, and *Restore* brings it back as it was. While it's there, its respondent link and collaborator links don't work. After 30 days, or with *Delete for good*, the survey and its responses are gone for good. (Needs the latest `supabase/schema.sql`.)
+
 **Two people editing.** Every save says which stored version it builds on. If someone else saved in between (a collaborator, or you in another window), nothing is overwritten: the builder says your latest changes aren't saved and lets you load the latest version or keep yours.
 
 **Logic order.** Display logic and skip rules can only look at questions that come earlier. Skip rules only jump forward, so a survey can't loop. If a respondent goes back and changes an answer, answers on pages that no longer apply are discarded on submit.

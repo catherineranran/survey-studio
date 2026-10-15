@@ -13,20 +13,25 @@ function storage(): Storage | null {
   }
 }
 
-/** Ids of the folded blocks of a survey. */
-export function readFolded(surveyId: string): string[] {
+/**
+ * Ids of the folded blocks of a survey, or null when nothing is remembered yet (the
+ * first time you open it in this browser): then every block starts folded.
+ */
+export function readFolded(surveyId: string): string[] | null {
   try {
-    const saved: unknown = JSON.parse(storage()?.getItem(foldKey(surveyId)) ?? '[]');
-    return Array.isArray(saved) ? saved.filter((x): x is string => typeof x === 'string') : [];
+    const raw = storage()?.getItem(foldKey(surveyId));
+    if (raw == null) return null;
+    const saved: unknown = JSON.parse(raw);
+    return Array.isArray(saved) ? saved.filter((x): x is string => typeof x === 'string') : null;
   } catch {
-    return [];
+    return null;
   }
 }
 
+/** Remembers the folded blocks; an empty list is kept too, so "all unfolded" stays that way. */
 export function writeFolded(surveyId: string, blockIds: string[]) {
   try {
-    if (blockIds.length) storage()?.setItem(foldKey(surveyId), JSON.stringify(blockIds));
-    else storage()?.removeItem(foldKey(surveyId));
+    storage()?.setItem(foldKey(surveyId), JSON.stringify(blockIds));
   } catch {
     /* not remembered */
   }
@@ -50,7 +55,11 @@ export function writeOutlineShown(shown: boolean) {
   }
 }
 
-/** Forgets the view of a deleted survey. */
+/** Forgets the view of a survey deleted for good. */
 export function forgetSurveyView(surveyId: string) {
-  writeFolded(surveyId, []);
+  try {
+    storage()?.removeItem(foldKey(surveyId));
+  } catch {
+    /* nothing to forget */
+  }
 }

@@ -104,3 +104,45 @@ describe('collaborator links', () => {
     expect(await backend.getSharedSurvey('anything')).toBeNull();
   });
 });
+
+describe('the bin', () => {
+  it('a deleted survey leaves the list, stops working for respondents, and comes back intact', async () => {
+    const backend = createLocalBackend();
+    const rec = await backend.createSurvey(blankSurvey('b1', 'Study'));
+    await backend.publish('b1', rec.definition, 'open');
+    await backend.deleteSurvey('b1');
+    expect((await backend.listSurveys()).map((s) => s.id)).toEqual([]);
+    expect((await backend.listDeletedSurveys()).map((s) => s.id)).toEqual(['b1']);
+    expect(await backend.getPublicSurvey('b1')).toBeNull();
+    expect(await codeOf(backend.submitResponse('b1', { answers: {}, otherText: {}, embedded: {}, meta: {} as never }))).toBe('not_found');
+    expect((await backend.getSurvey('b1'))?.deletedAt).toBeTruthy();
+
+    await backend.restoreSurvey('b1');
+    expect((await backend.listSurveys()).map((s) => s.id)).toEqual(['b1']);
+    expect(await backend.listDeletedSurveys()).toEqual([]);
+    expect((await backend.getPublicSurvey('b1'))?.survey.title).toBe('Study');
+  });
+
+  it('deleting for good removes the survey and its responses', async () => {
+    const backend = createLocalBackend();
+    await backend.createSurvey(blankSurvey('b2'));
+    await backend.submitPreview('b2', { answers: {}, otherText: {}, embedded: {}, meta: {} as never });
+    await backend.deleteSurvey('b2');
+    await backend.purgeSurvey('b2');
+    expect(await backend.listDeletedSurveys()).toEqual([]);
+    expect(await backend.getSurvey('b2')).toBeNull();
+    expect(await backend.listResponses('b2')).toEqual([]);
+  });
+
+  it('surveys are deleted for good after 30 days in the bin', async () => {
+    const backend = createLocalBackend();
+    await backend.createSurvey(blankSurvey('old'));
+    await backend.createSurvey(blankSurvey('recent'));
+    await backend.deleteSurvey('old');
+    vi.advanceTimersByTime(20 * 86_400_000);
+    await backend.deleteSurvey('recent');
+    vi.advanceTimersByTime(11 * 86_400_000);
+    expect((await backend.listDeletedSurveys()).map((s) => s.id)).toEqual(['recent']);
+    expect(await backend.getSurvey('old')).toBeNull();
+  });
+});

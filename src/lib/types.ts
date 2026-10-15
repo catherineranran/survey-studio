@@ -273,6 +273,8 @@ export interface SurveyRecord {
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Set while the survey is in the bin: nothing about it works until it's restored. */
+  deletedAt?: string | null;
 }
 
 export interface SurveySummary {
@@ -282,6 +284,7 @@ export interface SurveySummary {
   updatedAt: string;
   publishedAt: string | null;
   responseCount: number;
+  deletedAt?: string | null;
 }
 
 /** What a respondent's browser is allowed to load. */

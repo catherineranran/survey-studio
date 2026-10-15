@@ -5,7 +5,7 @@
 import { uuid } from '../ids';
 import { normalizeSurvey } from '../templates';
 import type { PublicSurvey, ResponseData, Survey, SurveyRecord, SurveyResponse, SurveyStatus, SurveySummary } from '../types';
-import { BackendError, CONFLICT_MESSAGE, SHARING_NEEDS_DATABASE, type Backend } from './types';
+import { BackendError, CONFLICT_MESSAGE, SHARING_NEEDS_DATABASE, binCutoff, type Backend } from './types';
 
 const SURVEYS_KEY = 'survey-studio.surveys.v1';
 const responsesKey = (id: string) => `survey-studio.responses.v1.${id}`;
@@ -65,6 +65,19 @@ export function createLocalBackend(): Backend {
     saveAll(list);
     return clone(rec);
   };
+  const summary = (r: SurveyRecord): SurveySummary => ({
+    id: r.id,
+    title: r.title,
+    status: r.status,
+    updatedAt: r.updatedAt,
+    publishedAt: r.publishedAt,
+    responseCount: responses(r.id).filter((x) => !x.meta?.preview).length,
+    deletedAt: r.deletedAt ?? null,
+  });
+  const purge = (id: string) => {
+    saveAll(all().filter((r) => r.id !== id));
+    store.remove(responsesKey(id));
+  };
   // Another window of this browser may have saved since this copy was loaded.
   const checkBase = (id: string, base?: string) => {
     const rec = all().find((r) => r.id === id);
@@ -104,15 +117,25 @@ export function createLocalBackend(): Backend {
 
     async listSurveys(): Promise<SurveySummary[]> {
       return all()
-        .map((r) => ({
-          id: r.id,
-          title: r.title,
-          status: r.status,
-          updatedAt: r.updatedAt,
-          publishedAt: r.publishedAt,
-          responseCount: responses(r.id).filter((x) => !x.meta?.preview).length,
-        }))
+        .filter((r) => !r.deletedAt)
+        .map(summary)
         .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+    },
+    async listDeletedSurveys(): Promise<SurveySummary[]> {
+      const cutoff = binCutoff();
+      for (const r of all()) if (r.deletedAt && r.deletedAt < cutoff) purge(r.id);
+      return all()
+        .filter((r) => r.deletedAt)
+        .map(summary)
+        .sort((a, b) => ((a.deletedAt ?? '') < (b.deletedAt ?? '') ? 1 : -1));
+    },
+    async restoreSurvey(id) {
+      update(id, (r) => {
+        r.deletedAt = null;
+      });
+    },
+    async purgeSurvey(id) {
+      purge(id);
     },
     async getSurvey(id) {
       const rec = all().find((r) => r.id === id);
@@ -160,8 +183,9 @@ export function createLocalBackend(): Backend {
       return current ? at : null;
     },
     async deleteSurvey(id) {
-      saveAll(all().filter((r) => r.id !== id));
-      store.remove(responsesKey(id));
+      update(id, (r) => {
+        r.deletedAt = now();
+      });
     },
 
     // Collaborator links need a database other people can reach.
@@ -181,7 +205,7 @@ export function createLocalBackend(): Backend {
 
     async getPublicSurvey(id): Promise<PublicSurvey | null> {
       const rec = all().find((r) => r.id === id);
-      if (!rec || !rec.published) return null;
+      if (!rec || !rec.published || rec.deletedAt) return null;
       return {
         id: rec.id,
         status: rec.status,
@@ -192,7 +216,7 @@ export function createLocalBackend(): Backend {
     },
     async submitResponse(surveyId, data) {
       const rec = all().find((r) => r.id === surveyId);
-      if (!rec || !rec.published) throw new BackendError('Survey not found', 'not_found');
+      if (!rec || !rec.published || rec.deletedAt) throw new BackendError('Survey not found', 'not_found');
       if (rec.status !== 'open') throw new BackendError('Survey is closed', 'closed');
       const s = rec.published.settings;
       if (s.closeAt && new Date(s.closeAt).getTime() < Date.now()) throw new BackendError('Survey is closed', 'closed');

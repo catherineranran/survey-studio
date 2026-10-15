@@ -67,8 +67,11 @@ export function Builder({ survey, surveyId, update, onPreview }: { survey: Surve
   const drawerRef = useRef<HTMLDialogElement>(null);
   const confirm = useConfirm();
 
-  // Folded blocks, remembered per survey in this browser. A block you arrive at opens.
-  const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set(readFolded(surveyId).filter((id) => id !== arrival)));
+  // Folded blocks, remembered per survey in this browser; the first time, all of them, so the
+  // outline and the page start as an overview. A block you arrive at opens.
+  const [folded, setFolded] = useState<ReadonlySet<string>>(
+    () => new Set((readFolded(surveyId) ?? survey.blocks.map((b) => b.id)).filter((id) => id !== arrival)),
+  );
   const foldedIds = useMemo(() => survey.blocks.filter((b) => folded.has(b.id)).map((b) => b.id), [survey.blocks, folded]);
   const foldedKey = foldedIds.join(' ');
   useEffect(() => writeFolded(surveyId, foldedKey ? foldedKey.split(' ') : []), [surveyId, foldedKey]);

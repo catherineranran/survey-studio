@@ -942,6 +942,11 @@ input:focus-visible + .mark {
   right: 0;
 }
 
+.menu-up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
 .menu-start {
   left: 0;
 }
@@ -1014,6 +1019,8 @@ input:focus-visible + .mark {
 
 /* ------------------------------------------------------------ dashboard */
 
+/* No overflow clipping here: row menus have to reach past the table's edge. The corner
+   cells take the rounding instead. */
 .survey-table {
   width: 100%;
   border-collapse: separate;
@@ -1021,7 +1028,14 @@ input:focus-visible + .mark {
   background: var(--paper);
   border: 1px solid var(--line-2);
   border-radius: var(--r-l);
-  overflow: hidden;
+}
+
+.survey-table thead th:first-child {
+  border-top-left-radius: calc(var(--r-l) - 1px);
+}
+
+.survey-table thead th:last-child {
+  border-top-right-radius: calc(var(--r-l) - 1px);
 }
 
 .survey-table th {
@@ -1047,6 +1061,69 @@ input:focus-visible + .mark {
 .survey-table .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* The bin: deleted surveys, restorable for a while. */
+.bin {
+  margin-top: 20px;
+  background: var(--paper);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-l);
+}
+
+.bin > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  font-weight: 650;
+  color: var(--ink-2);
+  list-style: none;
+  cursor: pointer;
+}
+
+.bin > summary::-webkit-details-marker {
+  display: none;
+}
+
+.bin > summary .hint {
+  font-weight: 400;
+}
+
+.bin-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  padding: 0 6px;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--sunk);
+}
+
+.bin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px 6px;
+}
+
+.bin-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-2);
+}
+
+.bin-text {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 260px;
+  min-width: 0;
 }
 
 .survey-link {

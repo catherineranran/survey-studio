@@ -43,6 +43,10 @@ create table if not exists public.responses (
   created_at  timestamptz not null default now()
 );
 
+-- The bin: a deleted survey keeps everything for 30 days (the app then deletes it for
+-- good). While it's there, its respondent and collaborator links don't work.
+alter table public.surveys add column if not exists deleted_at timestamptz;
+
 create index if not exists surveys_owner_idx on public.surveys (owner_id);
 create index if not exists responses_survey_created_idx on public.responses (survey_id, created_at);
 
@@ -257,7 +261,7 @@ as $$
     'response_count', (select count(*) from public.responses r where r.survey_id = s.id and not r.is_preview)
   )
   from public.surveys s
-  where s.id = p_id and s.published is not null;
+  where s.id = p_id and s.published is not null and s.deleted_at is null;
 $$;
 
 create or replace function public.submit_response(p_survey uuid, p_data jsonb)
@@ -274,7 +278,7 @@ declare
 begin
   -- Lock the survey row so concurrent submissions can't overshoot the response limit.
   select * into s from public.surveys where id = p_survey for update;
-  if not found or s.published is null then
+  if not found or s.published is null or s.deleted_at is not null then
     raise exception 'not_found';
   end if;
   if s.status <> 'open' then
@@ -382,7 +386,7 @@ as $$
   )
   from public.survey_shares sh
   join public.surveys s on s.id = sh.survey_id
-  where sh.token = p_token;
+  where sh.token = p_token and s.deleted_at is null;
 $$;
 
 -- Edit links: replace the working copy (never the published snapshot or the status).
@@ -397,7 +401,10 @@ declare
   sid uuid;
   at  timestamptz;
 begin
-  select survey_id into sid from public.survey_shares where token = p_token and role = 'edit';
+  select sh.survey_id into sid
+    from public.survey_shares sh
+    join public.surveys s on s.id = sh.survey_id
+   where sh.token = p_token and sh.role = 'edit' and s.deleted_at is null;
   if sid is null then
     raise exception 'not_allowed';
   end if;
