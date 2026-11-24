@@ -7,7 +7,9 @@ import { previewHash, previewWindowName, writePreviewDraft } from '../lib/previe
 import { navigate } from '../lib/router';
 import type { Survey, SurveyRecord } from '../lib/types';
 import { useUndoable, type Updater } from '../lib/useUndoable';
+import { VIDEO_DEFAULTS } from '../lib/videoUpload';
 import { Builder } from './builder/Builder';
+import { VideoUploadContext, registerVideoApplier } from './builder/uploadJobs';
 import { Flow } from './Flow';
 import { Results } from './Results';
 import { SettingsTab } from './SettingsTab';
@@ -110,6 +112,18 @@ export function Workspace({ id: idProp, shareToken, tab }: { id?: string; shareT
     },
     [draftUpdate, viewOnly, toast],
   );
+
+  // Owners upload videos for video questions; a finished upload goes into the working copy,
+  // whichever tab is open by then.
+  const videoUploads = useMemo(() => (!shareToken && record ? { surveyId: record.id } : null), [shareToken, record]);
+  useEffect(() => {
+    if (!videoUploads) return;
+    return registerVideoApplier(videoUploads.surveyId, (qid, patch) =>
+      update((s) => {
+        for (const b of s.blocks) for (const q of b.questions) if (q.id === qid && q.type === 'video') q.video = { ...VIDEO_DEFAULTS, ...q.video, ...patch };
+      }),
+    );
+  }, [videoUploads, update]);
 
   const markConflict = useCallback(() => {
     conflictRef.current = true;
@@ -405,7 +419,11 @@ export function Workspace({ id: idProp, shareToken, tab }: { id?: string; shareT
 
       <div className="ws-body">
         <ErrorBoundary key={active}>
-          {active === 'build' && <Builder survey={survey} surveyId={id} update={update} onPreview={openPreview} />}
+          {active === 'build' && (
+            <VideoUploadContext.Provider value={videoUploads}>
+              <Builder survey={survey} surveyId={id} update={update} onPreview={openPreview} />
+            </VideoUploadContext.Provider>
+          )}
           {active === 'flow' && <Flow survey={survey} update={update} surveyId={id} onPreview={openPreview} />}
           {active === 'settings' && <SettingsTab survey={survey} update={update} />}
           {active === 'share' && <ShareTab backend={backend} record={record} survey={survey} hasChanges={hasChanges} onPublish={publish} onStatus={setStatus} />}

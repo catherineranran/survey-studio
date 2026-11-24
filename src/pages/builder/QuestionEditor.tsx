@@ -95,11 +95,11 @@ export function QuestionEditor({ survey, q, change }: { survey: Survey; q: Quest
   );
 }
 
-function TypeContent({ q, change, lang }: { survey: Survey; q: Question; change: QMutate; lang: Lang }) {
+function TypeContent({ survey, q, change, lang }: { survey: Survey; q: Question; change: QMutate; lang: Lang }) {
   const setChoices = (key: 'choices' | 'rows' | 'columns') => (list: Choice[]) => change((x) => void (x[key] = list), key);
   switch (q.type) {
     case 'video':
-      return <VideoEditor q={q} change={change} />;
+      return <VideoEditor survey={survey} q={q} change={change} />;
     case 'single_choice':
     case 'multi_choice':
     case 'dropdown':

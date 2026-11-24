@@ -5,7 +5,10 @@
 import { uuid } from '../ids';
 import { normalizeSurvey } from '../templates';
 import type { PublicSurvey, ResponseData, Survey, SurveyRecord, SurveyResponse, SurveyStatus, SurveySummary } from '../types';
-import { BackendError, CONFLICT_MESSAGE, SHARING_NEEDS_DATABASE, binCutoff, type Backend } from './types';
+import { setLocalVideoReader } from '../video';
+import { videoLinks } from '../videoUpload';
+import { createLocalVideoStore, readLocalVideo } from './localVideos';
+import { BackendError, CONFLICT_MESSAGE, SHARING_NEEDS_DATABASE, binCutoff, type Backend, type VideoStore } from './types';
 
 const SURVEYS_KEY = 'survey-studio.surveys.v1';
 const responsesKey = (id: string) => `survey-studio.responses.v1.${id}`;
@@ -53,6 +56,9 @@ const now = () => new Date().toISOString();
 const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
 export function createLocalBackend(): Backend {
+  // Video questions play videos uploaded into this browser (the builder, its preview and respondents alike).
+  setLocalVideoReader(readLocalVideo);
+  let videos: VideoStore | null = null;
   const all = (): SurveyRecord[] => readJSON<SurveyRecord[]>(SURVEYS_KEY, []);
   const saveAll = (list: SurveyRecord[]) => store.set(SURVEYS_KEY, JSON.stringify(list));
   const responses = (id: string): SurveyResponse[] => readJSON<SurveyResponse[]>(responsesKey(id), []);
@@ -243,6 +249,13 @@ export function createLocalBackend(): Backend {
     async deleteResponses(surveyId, ids) {
       const drop = new Set(ids);
       store.set(responsesKey(surveyId), JSON.stringify(responses(surveyId).filter((r) => !drop.has(r.id))));
+    },
+
+    videoStore() {
+      videos ??= createLocalVideoStore(() =>
+        all().map((r) => ({ surveyId: r.id, title: r.title, binned: !!r.deletedAt, links: [...videoLinks(r.definition), ...videoLinks(r.published)] })),
+      );
+      return videos;
     },
   };
 }

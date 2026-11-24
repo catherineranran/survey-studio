@@ -37,6 +37,34 @@ export interface SharedSurvey {
   record: SurveyRecord;
 }
 
+/** The video links one of your surveys uses, in its working copy or its published version. */
+export interface SurveyVideoLinks {
+  surveyId: string;
+  title: string;
+  /** In the bin. */
+  binned: boolean;
+  links: string[];
+}
+
+/**
+ * Where videos uploaded from the builder are kept: Supabase Storage ('online': a public
+ * bucket respondents' browsers download from) or, without a database, this browser
+ * ('browser'). An upload is a folder of files: encrypted parts and a video.json manifest.
+ */
+export interface VideoStore {
+  where: 'online' | 'browser';
+  /** Stores one file of an upload. Rejects with an AbortError when `signal` aborts, with code 'network' when trying again may help. */
+  put(uploadId: string, name: string, data: Uint8Array, type: string, opts?: { onProgress?: (sent: number) => void; signal?: AbortSignal }): Promise<void>;
+  /** The address of a file of an upload, as video links use it. */
+  url(uploadId: string, name: string): Promise<string>;
+  /** Your uploads (their ids). */
+  list(): Promise<string[]>;
+  /** Deletes an upload's files for good. */
+  remove(uploadId: string): Promise<void>;
+  /** The video links of all your surveys, the bin included, to tell which uploads are in use. */
+  uses(): Promise<SurveyVideoLinks[]>;
+}
+
 /**
  * Everything the app needs from storage. Two implementations:
  * - local: the browser's own storage, no setup, for building and testing on one device
@@ -107,6 +135,9 @@ export interface Backend {
 
   listResponses(surveyId: string): Promise<SurveyResponse[]>;
   deleteResponses(surveyId: string, ids: string[]): Promise<void>;
+
+  /** Videos uploaded from the builder (survey owners only). */
+  videoStore(): VideoStore;
 }
 
 /** How long deleted surveys stay in the bin. */

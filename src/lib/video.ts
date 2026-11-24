@@ -4,6 +4,8 @@
 // travels in the link's fragment, `…/video.json#k=<key>`, which browsers never send
 // to the server. Survey links carry it, so participants' browsers open the video
 // without a password, while someone browsing the website only finds sealed files.
+// Videos uploaded from the builder are folders too (lib/videoUpload.ts): in Supabase
+// Storage, or, without a database, in this browser (local-video://uploads/…).
 
 export interface VideoManifest {
   format: 'survey-studio-video/1';
@@ -22,6 +24,8 @@ export interface VideoManifest {
   span?: number;
   fov?: number;
   title?: string;
+  /** Uploaded from the builder: when (ISO time). */
+  uploaded?: string;
   /** Encrypted folders: KEY_CHECK sealed with the key, so a link's key can be checked cheaply. */
   check?: string;
 }
@@ -30,8 +34,24 @@ export const KEY_CHECK = 'survey-studio-video';
 const MANIFEST_TIMEOUT = 15000;
 const STALL_TIMEOUT = 30000;
 
+/** Links of videos uploaded into this browser (Survey Studio without a database). */
+export const LOCAL_VIDEO_PREFIX = 'local-video://';
+let localReader: ((url: string) => Promise<Blob | null>) | null = null;
+
+/** The local backend reads videos uploaded into this browser. */
+export function setLocalVideoReader(read: ((url: string) => Promise<Blob | null>) | null) {
+  localReader = read;
+}
+
 /** fetch that gives up when no data arrives for `ms` (a dropped mobile connection otherwise hangs forever). */
 async function fetchPatiently(url: string, ms: number, init: RequestInit, onBytes?: (n: number) => void): Promise<ArrayBuffer> {
+  if (url.startsWith(LOCAL_VIDEO_PREFIX)) {
+    const blob = localReader ? await localReader(url) : null;
+    if (!blob) throw new Error('isn’t stored in this browser (videos uploaded without a database only play in the browser they were uploaded in)');
+    const buf = await blob.arrayBuffer();
+    onBytes?.(buf.byteLength);
+    return buf;
+  }
   const ctrl = new AbortController();
   let timer = setTimeout(() => ctrl.abort(), ms);
   const alive = () => {
@@ -82,7 +102,10 @@ export type VideoLink = { kind: 'file'; url: string } | { kind: 'folder'; manife
 
 const FILE_RE = /\.(mp4|m4v|webm|mov|ogv)$/i;
 
-/** Reads a video link. Only https links (and http on this computer, for testing) are accepted. */
+/**
+ * Reads a video link. Only https links (and http on this computer, for testing) are
+ * accepted, and video folders uploaded into this browser.
+ */
 export function parseVideoLink(src: string | undefined): VideoLink | null {
   const raw = src?.trim();
   if (!raw) return null;
@@ -93,14 +116,17 @@ export function parseVideoLink(src: string | undefined): VideoLink | null {
     return null;
   }
   const local = u.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(u.hostname);
+  if (u.protocol === 'local-video:') return /\.json$/i.test(u.pathname) ? parseVideoFolder(u) : null;
   if (u.protocol !== 'https:' && !local) return null;
-  if (/\.json$/i.test(u.pathname)) {
-    const key = new URLSearchParams(u.hash.slice(1)).get('k');
-    u.hash = '';
-    return { kind: 'folder', manifestUrl: u.href, key: key || null };
-  }
+  if (/\.json$/i.test(u.pathname)) return parseVideoFolder(u);
   if (FILE_RE.test(u.pathname)) return { kind: 'file', url: u.href };
   return null;
+}
+
+function parseVideoFolder(u: URL): VideoLink {
+  const key = new URLSearchParams(u.hash.slice(1)).get('k');
+  u.hash = '';
+  return { kind: 'folder', manifestUrl: u.href, key: key || null };
 }
 
 export function base64url(bytes: Uint8Array): string {

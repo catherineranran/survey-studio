@@ -189,6 +189,8 @@ function VideoPlaceholder({ q }: { q: Question }) {
   } catch {
     /* shown as it is */
   }
+  // An uploaded video goes by its file name.
+  if (link && v?.name) name = v.name;
   return (
     <div className="vp-placeholder">
       <Icon name="play" size={26} />

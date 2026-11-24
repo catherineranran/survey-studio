@@ -106,6 +106,8 @@ export interface VideoSettings {
    * folder (…/video.json), with `#k=<key>` when its files are encrypted.
    */
   src: string;
+  /** The file's name, for a video uploaded from the builder; shown in the builder only. */
+  name?: string;
   /** 'flat': an ordinary video. 'wrap': a magic window into a picture that wraps around the viewer. */
   view: 'flat' | 'wrap';
   /** wrap: how far the picture reaches around the viewer, in degrees (140, 180, 360 …). */

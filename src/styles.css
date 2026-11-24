@@ -1665,6 +1665,8 @@ input:focus-visible + .mark {
 }
 
 .outline-q {
+  /* Its list item isn't a flex row, so the button sets its own width (and long questions end in …). */
+  width: 100%;
   padding: 2px 8px;
   font-size: 13px;
   align-items: baseline;
@@ -2163,6 +2165,7 @@ input:focus-visible + .mark {
 
 .qcard-meta {
   display: flex;
+  flex-wrap: wrap; /* on phones the tools go onto a line of their own instead of past the screen's edge */
   align-items: center;
   gap: 8px;
   min-height: 28px;
@@ -5122,4 +5125,158 @@ body.vp-filled {
   display: grid;
   gap: 12px;
   margin-top: 4px;
+}
+
+/* Uploading a video from the computer, in the video question's editor */
+.video-upload {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.video-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.upload-status {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--sunk);
+}
+
+.upload-status p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.upload-status.is-failed {
+  border-color: color-mix(in oklab, var(--danger) 35%, var(--paper));
+  background: var(--danger-tint);
+}
+
+.upload-status-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.upload-status.is-failed .upload-status-line {
+  justify-content: flex-start;
+}
+
+.upload-status-name {
+  min-width: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.upload-status-amount {
+  color: var(--ink-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.upload-bar {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 8px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.upload-bar::-webkit-progress-bar {
+  background: var(--line);
+}
+
+.upload-bar::-webkit-progress-value {
+  background: var(--form);
+  transition: width 0.3s ease;
+}
+
+.upload-bar::-moz-progress-bar {
+  background: var(--form);
+}
+
+/* The "Uploaded videos" dialog */
+.uploads-total {
+  margin: 0;
+  font-weight: 650;
+}
+
+.uploads-empty {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.uploads {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line-2);
+}
+
+.upload-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.upload-row-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.upload-row-name {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.upload-row-unused {
+  color: var(--logic);
+}
+
+.upload-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.upload-row-tag {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--form-tint);
+  color: var(--form-strong);
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .upload-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .upload-row-actions {
+    justify-content: flex-start;
+  }
 }

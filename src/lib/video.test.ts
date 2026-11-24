@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { base64url, fetchManifest, fromBase64url, parseVideoLink } from './video';
+import { base64url, fetchManifest, fromBase64url, parseVideoLink, setLocalVideoReader } from './video';
 
 describe('video links', () => {
   it('reads files and video folders, with or without a key', () => {
@@ -28,6 +28,22 @@ describe('video links', () => {
       );
     } finally {
       globalThis.fetch = real;
+    }
+  });
+
+  it('reads video folders uploaded into this browser', async () => {
+    expect(parseVideoLink('local-video://uploads/abc-1/video.json#k=xyz')).toEqual({ kind: 'folder', manifestUrl: 'local-video://uploads/abc-1/video.json', key: 'xyz' });
+    expect(parseVideoLink('local-video://uploads/abc-1/clip.mp4')).toBeNull();
+    const manifest = { format: 'survey-studio-video/1', type: 'video/mp4', parts: ['part-1-0123456789.bin'], encrypted: false };
+    try {
+      setLocalVideoReader(async (url) => (url === 'local-video://uploads/abc-1/video.json' ? new Blob([JSON.stringify(manifest)]) : null));
+      expect(await fetchManifest('local-video://uploads/abc-1/video.json')).toEqual(manifest);
+      await expect(fetchManifest('local-video://uploads/other/video.json')).rejects.toThrow('The video folder isn’t stored in this browser');
+      // Without the browser-only storage (Supabase mode), such links can't play.
+      setLocalVideoReader(null);
+      await expect(fetchManifest('local-video://uploads/abc-1/video.json')).rejects.toThrow('isn’t stored in this browser');
+    } finally {
+      setLocalVideoReader(null);
     }
   });
 

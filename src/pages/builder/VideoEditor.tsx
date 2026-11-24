@@ -1,25 +1,33 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import { Field, NumberInput, Toggle } from '../../components/ui';
-import type { Question, VideoSettings } from '../../lib/types';
+import { useContext, useEffect, useId, useRef, useState } from 'react';
+import { Button, Field, NumberInput, Toggle } from '../../components/ui';
+import { useBackend } from '../../lib/backend/context';
+import type { Question, Survey, VideoSettings } from '../../lib/types';
 import { fetchManifest, keyMatches, parseVideoLink } from '../../lib/video';
+import { VIDEO_DEFAULTS, isVideoFile, probeVideo } from '../../lib/videoUpload';
 import type { QMutate } from './QuestionEditor';
+import { UploadedVideos, clock, megabytes } from './UploadedVideos';
+import { VideoUploadContext, cancelUpload, dismissUpload, retryUpload, startUpload, useUploadJob, type UploadJob } from './uploadJobs';
 
-const DEFAULTS: VideoSettings = { src: '', view: 'wrap', span: 180, fov: 90, tilt: false };
+const ACCEPT = 'video/mp4,video/webm,video/quicktime,.mp4,.m4v,.webm,.mov';
 
-function duration(sec: number) {
-  const s = Math.round(sec);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
-/** The video of a video question: its link, and how it's shown. */
-export function VideoEditor({ q, change }: { q: Question; change: QMutate }) {
+/** The video of a video question: its link (or an upload), and how it's shown. */
+export function VideoEditor({ survey, q, change }: { survey: Survey; q: Question; change: QMutate }) {
   const id = useId();
-  const v = { ...DEFAULTS, ...q.video };
-  const set = (patch: Partial<VideoSettings>, key?: string) => change((x) => void (x.video = { ...DEFAULTS, ...x.video, ...patch }), key);
+  const v = { ...VIDEO_DEFAULTS, ...q.video };
+  const set = (patch: Partial<VideoSettings>, key?: string) => change((x) => void (x.video = { ...VIDEO_DEFAULTS, ...x.video, ...patch }), key);
   const link = parseVideoLink(v.src);
   const [check, setCheck] = useState<{ ok: boolean; text: string } | null>(null);
   // A pasted video folder suggests how to show it; take that once, for the new link.
   const appliedFor = useRef(v.src);
+
+  const backend = useBackend();
+  const uploads = useContext(VideoUploadContext);
+  const job = useUploadJob(uploads?.surveyId, q.id);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [probing, setProbing] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const store = uploads ? backend.videoStore() : null;
 
   useEffect(() => {
     const l = parseVideoLink(v.src);
@@ -41,9 +49,9 @@ export function VideoEditor({ q, change }: { q: Question; change: QMutate }) {
         const parts = [
           m.title,
           m.encrypted ? 'encrypted' : 'not encrypted',
-          m.duration ? duration(m.duration) : null,
+          m.duration ? clock(m.duration) : null,
           m.width && m.height ? `${m.width} × ${m.height}` : null,
-          m.bytes ? `${Math.round(m.bytes / 1048576)} MB` : null,
+          m.bytes ? `${megabytes(m.bytes)} MB` : null,
         ];
         setCheck({ ok: true, text: `Found: ${parts.filter(Boolean).join(' · ')}` });
         if (appliedFor.current !== v.src) {
@@ -58,14 +66,79 @@ export function VideoEditor({ q, change }: { q: Question; change: QMutate }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [v.src]);
 
+  const upload = async (file: File | undefined) => {
+    if (!file || !uploads) return;
+    setNotice(null);
+    if (!isVideoFile(file)) return setNotice('Choose a video file: .mp4, .webm or .mov.');
+    setProbing(true);
+    const meta = await probeVideo(file);
+    setProbing(false);
+    if (!meta)
+      return setNotice(
+        'This browser can’t show the picture of this video, so many respondents’ browsers couldn’t either. Convert it to MP4 (H.264), for example with HandBrake, and upload that.',
+      );
+    startUpload(backend, uploads.surveyId, q.id, file, { title: file.name, ...meta });
+  };
+
+  const uploading = job?.state === 'uploading';
+  const busy = probing || uploading;
   const linkError = v.src.trim() && !link ? 'Use a link that starts with https:// and ends in .mp4, .webm or .mov, or a video folder link (…/video.json).' : null;
   return (
     <div className="video-edit" data-no-format>
+      {uploads && store && (
+        <div className="video-upload">
+          <div className="video-upload-actions">
+            <Button size="sm" icon="upload" disabled={busy} onClick={() => fileInput.current?.click()}>
+              {v.src ? 'Upload another video…' : 'Upload a video…'}
+            </Button>
+            <Button size="sm" variant="ghost" disabled={uploading} onClick={() => setLibraryOpen(true)}>
+              Uploaded videos
+            </Button>
+            <input
+              ref={fileInput}
+              type="file"
+              accept={ACCEPT}
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                void upload(file);
+              }}
+            />
+          </div>
+          {probing && <p className="hint">Checking the video …</p>}
+          {notice && <p className="field-error">{notice}</p>}
+          {job ? (
+            <UploadStatus
+              job={job}
+              onCancel={() => cancelUpload(uploads.surveyId, q.id)}
+              onRetry={() => retryUpload(uploads.surveyId, q.id)}
+              onDismiss={() => dismissUpload(uploads.surveyId, q.id)}
+            />
+          ) : (
+            !probing &&
+            !notice && (
+              <p className="hint">
+                {store.where === 'online'
+                  ? 'From your computer: encrypted in your browser, then stored in your Supabase project.'
+                  : 'From your computer. Without a database, the video stays in this browser and plays only here.'}{' '}
+                Respondents’ browsers load the whole video before it plays, so smaller files start sooner.
+              </p>
+            )
+          )}
+        </div>
+      )}
       <Field
         label="Video link"
         htmlFor={`${id}-src`}
         error={linkError ?? (check && !check.ok ? check.text : null)}
-        hint={check?.ok ? check.text : 'A video file on the web (.mp4, .webm), or a video folder link (…/video.json#k=…) for an encrypted video.'}
+        hint={
+          uploading
+            ? 'Filled in when the upload is done.'
+            : check?.ok
+              ? check.text
+              : `${uploads ? 'Filled in by an upload, or paste one: a' : 'A'} video file on the web (.mp4, .webm), or a video folder link (…/video.json#k=…) for an encrypted video.`
+        }
       >
         <input
           id={`${id}-src`}
@@ -74,7 +147,9 @@ export function VideoEditor({ q, change }: { q: Question; change: QMutate }) {
           value={v.src}
           placeholder="https://"
           spellCheck={false}
-          onChange={(e) => set({ src: e.target.value.trim() }, 'src')}
+          // The upload fills it in when it's done; a link typed meanwhile would be overwritten.
+          readOnly={uploading}
+          onChange={(e) => set({ src: e.target.value.trim(), name: undefined }, 'src')}
         />
       </Field>
       <Field label="Shown as" htmlFor={`${id}-view`}>
@@ -127,6 +202,57 @@ export function VideoEditor({ q, change }: { q: Question; change: QMutate }) {
           : 'Respondents can continue without watching. Switch on Required to make them watch it to the end.'}{' '}
         The data records seconds played, whether it reached the end{v.view === 'wrap' ? ' and where people looked each second' : ''}.
       </p>
+      {uploads && store && libraryOpen && (
+        <UploadedVideos
+          open
+          onClose={() => setLibraryOpen(false)}
+          store={store}
+          survey={survey}
+          surveyId={uploads.surveyId}
+          current={v.src}
+          onUse={(src, name) => {
+            // Shown as it was set up; the folder suggests nothing.
+            appliedFor.current = src;
+            set({ src, name });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function UploadStatus({ job, onCancel, onRetry, onDismiss }: { job: UploadJob; onCancel: () => void; onRetry: () => void; onDismiss: () => void }) {
+  if (job.state === 'failed')
+    return (
+      <div className="upload-status is-failed" role="alert">
+        <p>
+          <strong>“{job.fileName}” wasn’t uploaded.</strong> {job.error}
+        </p>
+        <div className="upload-status-line">
+          <Button size="sm" onClick={onRetry}>
+            Try again
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onDismiss}>
+            Dismiss
+          </Button>
+        </div>
+      </div>
+    );
+  return (
+    <div className="upload-status">
+      <div className="upload-status-line">
+        <span className="upload-status-name">{job.fileName}</span>
+        <span className="upload-status-amount">
+          {megabytes(job.sent)} of {megabytes(job.size)} MB
+        </span>
+      </div>
+      <progress className="upload-bar" max={job.size || 1} value={job.sent} aria-label={`Uploading ${job.fileName}`} />
+      <div className="upload-status-line">
+        <span className="hint">Encrypting and uploading. You can keep working; keep this tab open until it’s done.</span>
+        <Button size="sm" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }

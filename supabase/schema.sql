@@ -457,3 +457,44 @@ grant execute on function public.get_signup_settings() to authenticated;
 grant execute on function public.set_signup_settings(text, boolean) to authenticated;
 grant execute on function public.get_shared_survey(text) to anon, authenticated;
 grant execute on function public.save_shared_survey(text, jsonb, timestamptz) to anon, authenticated;
+
+-- Videos uploaded from the builder ---------------------------------------------
+-- Owners can upload a video for a video question from their computer. The app encrypts
+-- it in the browser and stores the parts in the public bucket "survey-videos", in a
+-- folder named after the owner's account (<owner id>/<upload id>/). Respondents'
+-- browsers download the files through the bucket's public links; the key to open them
+-- is only in the survey's video link (…/video.json#k=…). Only the owner can add, list
+-- or delete files in their folder; nobody can change a file once it's there.
+-- If this part can't run (it needs the storage schema of a Supabase project), the rest
+-- of the file still applies, and a warning says what to do.
+do $$
+begin
+  begin
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('survey-videos', 'survey-videos', true, 20971520, array['application/octet-stream', 'application/json'])
+    on conflict (id) do update
+      set public = true,
+          file_size_limit = excluded.file_size_limit,
+          allowed_mime_types = excluded.allowed_mime_types;
+  exception when others then
+    raise warning 'Survey Studio: the bucket for uploaded videos could not be made (%). In Supabase, open Storage and create a public bucket named survey-videos.', sqlerrm;
+  end;
+
+  drop policy if exists "Owners upload videos" on storage.objects;
+  create policy "Owners upload videos" on storage.objects
+    for insert to authenticated
+    with check (bucket_id = 'survey-videos' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+  drop policy if exists "Owners list their videos" on storage.objects;
+  create policy "Owners list their videos" on storage.objects
+    for select to authenticated
+    using (bucket_id = 'survey-videos' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+  drop policy if exists "Owners delete their videos" on storage.objects;
+  create policy "Owners delete their videos" on storage.objects
+    for delete to authenticated
+    using (bucket_id = 'survey-videos' and (storage.foldername(name))[1] = (select auth.uid())::text);
+exception when others then
+  raise warning 'Survey Studio: video uploads are not set up (%). Uploading videos from the builder will not work; video links still do.', sqlerrm;
+end;
+$$;
