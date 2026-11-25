@@ -44,7 +44,15 @@ export function ProlificPanel({
 }) {
   const on = usesProlific(survey);
   const live = !!record.published && usesProlific(record.published);
-  const endings = useMemo(() => surveyEndings(survey), [survey]);
+  // Endings of the working copy, and of the published survey: respondents get that one, so its
+  // endings need codes too until the changes are published.
+  const endings = useMemo(() => {
+    const out = surveyEndings(survey);
+    for (const e of record.published ? surveyEndings(record.published) : [])
+      if (!out.some((x) => x.key === e.key))
+        out.push({ ...e, detail: `${e.detail} Only in the published survey: respondents can still end this way until you publish your changes.` });
+    return out;
+  }, [survey, record.published]);
   const visible = useMemo(() => visibleCompletionCodes(survey), [survey]);
   const [saved, setSaved] = useState<CompletionCodes | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
