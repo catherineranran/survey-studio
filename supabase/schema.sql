@@ -426,6 +426,53 @@ begin
 end;
 $$;
 
+-- Prolific completion codes ---------------------------------------------------
+--
+-- Each ending of a survey ('complete', 'declined_consent' or a skip-logic end tag) can
+-- send respondents back to Prolific with its own completion code, which Prolific can use
+-- to approve and pay automatically. The codes are kept here, apart from the survey, so
+-- nobody can read them in the published survey: only the owner sees them, and a
+-- respondent's browser gets the link for its ending from completion_link(), after its
+-- response is stored.
+
+create table if not exists public.survey_completion (
+  survey_id  uuid primary key references public.surveys (id) on delete cascade,
+  codes      jsonb not null default '{}'::jsonb check (jsonb_typeof(codes) = 'object'),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.survey_completion enable row level security;
+revoke all on public.survey_completion from anon;
+grant select, insert, update, delete on public.survey_completion to authenticated;
+
+drop policy if exists "Owners manage their completion codes" on public.survey_completion;
+create policy "Owners manage their completion codes" on public.survey_completion
+  for all to authenticated
+  using (exists (select 1 from public.surveys s where s.id = survey_id and s.owner_id = (select auth.uid())))
+  with check (exists (select 1 from public.surveys s where s.id = survey_id and s.owner_id = (select auth.uid())));
+
+-- The Prolific completion link for the ending a stored response reached, or null.
+create or replace function public.completion_link(p_response uuid)
+returns text
+language plpgsql stable security definer
+set search_path = public
+as $$
+declare
+  code text;
+begin
+  select c.codes ->> coalesce(nullif(r.data -> 'meta' ->> 'status', ''), 'complete')
+    into code
+    from public.responses r
+    join public.surveys s on s.id = r.survey_id
+    join public.survey_completion c on c.survey_id = r.survey_id
+   where r.id = p_response and not r.is_preview and s.deleted_at is null;
+  if code is null or code !~ '^[A-Za-z0-9_-]{1,64}$' then
+    return null;
+  end if;
+  return 'https://app.prolific.com/submissions/complete?cc=' || code;
+end;
+$$;
+
 -- Response counts for the signed-in owner's dashboard (row-level security applies).
 create or replace function public.my_response_counts()
 returns table (survey_id uuid, n bigint)
@@ -446,6 +493,7 @@ revoke all on function public.get_signup_settings() from public, anon;
 revoke all on function public.set_signup_settings(text, boolean) from public, anon;
 revoke all on function public.get_shared_survey(text) from public;
 revoke all on function public.save_shared_survey(text, jsonb, timestamptz) from public;
+revoke all on function public.completion_link(uuid) from public;
 
 grant execute on function public.get_public_survey(uuid) to anon, authenticated;
 grant execute on function public.submit_response(uuid, jsonb) to anon, authenticated;
@@ -455,6 +503,7 @@ grant execute on function public.signup_mode() to anon, authenticated;
 grant execute on function public.is_admin() to authenticated;
 grant execute on function public.get_signup_settings() to authenticated;
 grant execute on function public.set_signup_settings(text, boolean) to authenticated;
+grant execute on function public.completion_link(uuid) to anon, authenticated;
 grant execute on function public.get_shared_survey(text) to anon, authenticated;
 grant execute on function public.save_shared_survey(text, jsonb, timestamptz) to anon, authenticated;
 

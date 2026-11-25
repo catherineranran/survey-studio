@@ -247,7 +247,8 @@ function experiment(id: string): Survey {
       welcomeText: 'This short study takes about 3 minutes. You will read a short text and answer a few questions about it.',
       endTitle: 'Thank you!',
       endMessage: 'Your response has been recorded. You will now be sent back to Prolific.',
-      redirectUrl: 'https://app.prolific.com/submissions/complete?cc=REPLACE_ME',
+      // The completion code goes under Share → Prolific, so it isn't readable in the survey.
+      redirectUrl: '',
     },
     blocks: [block('Consent', [consent]), vignetteA, vignetteB, outcome],
   };
@@ -408,7 +409,7 @@ export const TEMPLATES: Template[] = [
   {
     id: 'experiment',
     name: 'Two-condition experiment',
-    description: 'Balanced random assignment to a gain or loss frame, piped follow-up, attention check and a Prolific redirect.',
+    description: 'Balanced random assignment to a gain or loss frame, piped follow-up, attention check and Prolific IDs (add your completion code under Share → Prolific).',
     build: experiment,
   },
   {

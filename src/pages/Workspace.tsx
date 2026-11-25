@@ -426,7 +426,7 @@ export function Workspace({ id: idProp, shareToken, tab }: { id?: string; shareT
           )}
           {active === 'flow' && <Flow survey={survey} update={update} surveyId={id} onPreview={openPreview} />}
           {active === 'settings' && <SettingsTab survey={survey} update={update} />}
-          {active === 'share' && <ShareTab backend={backend} record={record} survey={survey} hasChanges={hasChanges} onPublish={publish} onStatus={setStatus} />}
+          {active === 'share' && <ShareTab backend={backend} record={record} survey={survey} update={update} hasChanges={hasChanges} onPublish={publish} onStatus={setStatus} />}
           {active === 'results' && <Results backend={backend} surveyId={id} survey={record.published ?? survey} />}
         </ErrorBoundary>
       </div>

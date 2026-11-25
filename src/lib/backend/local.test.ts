@@ -146,3 +146,42 @@ describe('the bin', () => {
     expect(await backend.getSurvey('old')).toBeNull();
   });
 });
+
+describe('Prolific completion codes', () => {
+  const response = (status: string) => ({ answers: {}, otherText: {}, embedded: { PROLIFIC_PID: 'p1' }, meta: { status } as never });
+
+  it('are kept apart from the survey and give each stored response the link for its ending', async () => {
+    const backend = createLocalBackend();
+    const rec = await backend.createSurvey(blankSurvey('pc1', 'Study'));
+    await backend.publish('pc1', rec.definition, 'open');
+    expect(await backend.getCompletionCodes('pc1')).toEqual({});
+    await backend.setCompletionCodes('pc1', { complete: 'C1AB2CD3', declined_consent: 'DATA0OUT' });
+    expect(await backend.getCompletionCodes('pc1')).toEqual({ complete: 'C1AB2CD3', declined_consent: 'DATA0OUT' });
+    // Not in anything respondents load.
+    expect(JSON.stringify(await backend.getPublicSurvey('pc1'))).not.toContain('C1AB2CD3');
+
+    const done = await backend.submitResponse('pc1', response('complete'));
+    const declined = await backend.submitResponse('pc1', response('declined_consent'));
+    const other = await backend.submitResponse('pc1', response('screened_out'));
+    expect(await backend.completionLink('pc1', done)).toBe('https://app.prolific.com/submissions/complete?cc=C1AB2CD3');
+    expect(await backend.completionLink('pc1', declined)).toBe('https://app.prolific.com/submissions/complete?cc=DATA0OUT');
+    expect(await backend.completionLink('pc1', other)).toBeNull();
+    expect(await backend.completionLink('pc1', 'no-such-response')).toBeNull();
+    // Test responses from the preview never get one.
+    const preview = await backend.submitPreview('pc1', { ...response('complete'), meta: { status: 'complete', preview: true } as never });
+    expect(await backend.completionLink('pc1', preview)).toBeNull();
+  });
+
+  it('stop working in the bin and go when the survey is deleted for good', async () => {
+    const backend = createLocalBackend();
+    const rec = await backend.createSurvey(blankSurvey('pc2'));
+    await backend.publish('pc2', rec.definition, 'open');
+    await backend.setCompletionCodes('pc2', { complete: 'C1AB2CD3' });
+    const id = await backend.submitResponse('pc2', response('complete'));
+    await backend.deleteSurvey('pc2');
+    expect(await backend.completionLink('pc2', id)).toBeNull();
+    await backend.purgeSurvey('pc2');
+    expect(await backend.getCompletionCodes('pc2')).toEqual({});
+    expect(await codeOf(backend.setCompletionCodes('pc2', { complete: 'X' }))).toBe('not_found');
+  });
+});

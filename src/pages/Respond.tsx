@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { QuestionView } from '../components/QuestionView';
 import { RichText } from '../components/RichText';
 import { Button, Icon, Spinner } from '../components/ui';
-import { BackendError, getBackend } from '../lib/backend';
+import { BackendError, getBackend, type Backend } from '../lib/backend';
+import { COMPLETION_CODE_RE, completionUrl, usesProlific } from '../lib/prolific';
 import {
   effectiveCtx,
   finalizeAnswers,
@@ -123,6 +124,23 @@ export interface RespondProps {
   /** Builder preview: run this draft instead of the published version, and flag the response as a test. */
   previewSurvey?: Survey;
   previewOptions?: PreviewOptions;
+}
+
+/**
+ * The Prolific completion link for a stored response, tried a few times: without it a
+ * participant isn't sent back to Prolific to be paid. Null when there's no code for the ending.
+ */
+async function prolificReturn(backend: Backend, surveyId: string, responseId: string): Promise<string | null> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await backend.completionLink(surveyId, responseId);
+    } catch (e) {
+      // A database without completion codes yet: nothing to wait for.
+      if (e instanceof BackendError && e.code === 'setup') return null;
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
+  return null;
 }
 
 export function Respond({ surveyId, previewSurvey, previewOptions }: RespondProps) {
@@ -356,7 +374,19 @@ export function Respond({ surveyId, previewSurvey, previewOptions }: RespondProp
       const s = rt.survey.settings;
       const finalCtx = effectiveCtx(rt.plan, ctx, rt.history);
       const endMessage = pipe(message || s.endMessage || t(lang, 'defaultEndMessage'), finalCtx, extra);
-      const target = redirect ?? (status === 'complete' ? s.redirectUrl : '');
+      // Prolific: the completion link for this ending, given out only now that the response is
+      // stored (and only to people who came from Prolific). The preview shows where it leads.
+      const prolific = !preview
+        ? rt.embedded.PROLIFIC_PID
+          ? await prolificReturn(backend, surveyId, id)
+          : null
+        : usesProlific(rt.survey)
+          ? await backend.getCompletionCodes(surveyId).then(
+              (codes) => (codes[status] && COMPLETION_CODE_RE.test(codes[status]) ? completionUrl(codes[status]) : null),
+              () => null,
+            )
+          : null;
+      const target = prolific ?? redirect ?? (status === 'complete' ? s.redirectUrl : '');
       const url = target?.trim() ? pipeUrl(target.trim(), finalCtx, extra) : undefined;
       setPhase({ kind: 'done', message: endMessage, redirect: url });
       focusTop();

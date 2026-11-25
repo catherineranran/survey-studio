@@ -32,7 +32,8 @@ It is a static web app. Run it on your laptop, host it free on GitHub Pages, and
 **Collecting**
 - Publishing takes a snapshot: you can keep editing a live survey, respondents only see changes when you publish again
 - URL parameters (Prolific, MTurk/CloudResearch, panel IDs) stored with each response, optionally required
-- Redirect after completion, for example to your Prolific completion link
+- Prolific: participant IDs recorded, and people sent back to Prolific with a completion code per ending (finished, declined consent, screened out), which Prolific can use to approve and pay automatically; the codes stay out of the survey
+- Redirect after completion to any other link
 - Open/close, response limit, automatic close date, one response per browser, resume unfinished answers
 - Respondent pages in English or German, mobile-friendly, built for keyboard and screen-reader use
 - Preview in its own window, at desktop or phone width, with the survey's outline next to it: start at any block or question, choose which branch you get, and skip required questions. Test responses are kept separately and flagged
@@ -101,7 +102,15 @@ GitHub Pages needs a **public** repository on the free plan. If you want to keep
 
 ## Using it
 
-**Survey links.** Respondents get `https://…/survey-studio/?s=<survey id>`. Add URL parameters you declared in the Flow tab, e.g. `&PROLIFIC_PID=…`. The Share tab gives you the ready-made Prolific study URL, a QR code and an embed snippet.
+**Survey links.** Respondents get `https://…/survey-studio/?s=<survey id>`. Add URL parameters you declared in the Flow tab, e.g. `&PROLIFIC_PID=…`. The Share tab gives you a QR code and an embed snippet.
+
+**Prolific.** In the Share tab, *Prolific → Set up for Prolific* records `PROLIFIC_PID`, `STUDY_ID` and `SESSION_ID` with each response (publish afterwards). Then:
+
+1. Copy the *Study link* into Prolific (*Data collection*: paste it as the study URL and choose *I'll use URL parameters*).
+2. In Prolific's *Completion paths*, copy each code (or its whole completion link) into the ending it belongs to: *Finished the survey*, *Declined consent* (if a consent question ends the survey when declined) and each skip-logic ending tag such as `screened_out`, then *Save codes*. For automatic payment, give the finishing code the action that approves submissions; to check data first, hold for review.
+3. Preview the survey to the end: the last page shows the Prolific link that ending uses.
+
+When someone who came from Prolific reaches an ending with a code, they're sent to `https://app.prolific.com/submissions/complete?cc=<code>` straight after their response is saved. The codes are kept apart from the survey (only you can see them; they apply without publishing), so participants can't find them in it: their browser only gets the link for their ending once the response is stored. People who open the survey without a Prolific ID see the end message instead. With Supabase this needs the latest `supabase/schema.sql`.
 
 **Sharing the survey with colleagues.** In the Share tab, *Share with collaborators* makes links that open the survey in the builder, no account needed: a *view-only* link (look around and preview) or an *edit* link (also change questions, blocks and settings; the changes are saved to your survey). People with these links never see responses, can't publish, and can't share further; their previews don't keep test answers. Anyone who has a link has its access, so send it only to people you trust. *Turn off* stops a link at once; a new link is always a different one. This needs the Supabase database (run the latest `supabase/schema.sql` once after updating).
 
@@ -141,7 +150,7 @@ Upload the folder and use `https://…/clip/video.json#k=<key>` (the key is prin
 
 Worth knowing before you run a real study:
 
-- **Redirect links are visible.** Completion and screen-out links (for example a Prolific completion code) are part of the published survey, so a technically minded participant can find them without finishing. Check responses against your data before approving submissions.
+- **Completion codes.** Codes saved under *Share → Prolific* are only given out after a response is stored, but anyone with the survey link can store a response, even an empty one made by hand. With automatic approval, check your data (attention checks, durations, empty responses) and report or reject in Prolific where needed. Redirect links typed into Settings or skip logic are part of the published survey and visible to anyone who looks (the survey checker warns about Prolific codes there).
 - **No bot protection or rate limiting.** Anyone with the link can submit, as often as they like, and could forge values. Screen your data (attention checks, durations, duplicate participant IDs).
 - **Balanced assignment counts submitted responses.** When many people start at the same moment, groups can drift apart until those responses arrive. For a large burst of simultaneous participants, plain random assignment may balance as well.
 - **Randomizer branches.** Assignments are recorded by branch name, so don't rename branches during data collection (conditions in your logic follow a rename, but responses already collected keep the old name). A skip rule that jumps to a block inside a randomizer goes to the branch the respondent got. Blocks inside a randomizer shouldn't have display logic of their own (the survey checker warns).

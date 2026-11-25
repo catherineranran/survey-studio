@@ -5,6 +5,7 @@
 import { uuid } from '../ids';
 import { normalizeSurvey } from '../templates';
 import type { PublicSurvey, ResponseData, Survey, SurveyRecord, SurveyResponse, SurveyStatus, SurveySummary } from '../types';
+import { COMPLETION_CODE_RE, completionUrl, type CompletionCodes } from '../prolific';
 import { setLocalVideoReader } from '../video';
 import { videoLinks } from '../videoUpload';
 import { createLocalVideoStore, readLocalVideo } from './localVideos';
@@ -12,6 +13,7 @@ import { BackendError, CONFLICT_MESSAGE, SHARING_NEEDS_DATABASE, binCutoff, type
 
 const SURVEYS_KEY = 'survey-studio.surveys.v1';
 const responsesKey = (id: string) => `survey-studio.responses.v1.${id}`;
+const codesKey = (id: string) => `survey-studio.completion.v1.${id}`;
 
 // Some embedded browsers block storage; fall back to memory so the app still works.
 const memory = new Map<string, string>();
@@ -83,6 +85,7 @@ export function createLocalBackend(): Backend {
   const purge = (id: string) => {
     saveAll(all().filter((r) => r.id !== id));
     store.remove(responsesKey(id));
+    store.remove(codesKey(id));
   };
   // Another window of this browser may have saved since this copy was loaded.
   const checkBase = (id: string, base?: string) => {
@@ -249,6 +252,21 @@ export function createLocalBackend(): Backend {
     async deleteResponses(surveyId, ids) {
       const drop = new Set(ids);
       store.set(responsesKey(surveyId), JSON.stringify(responses(surveyId).filter((r) => !drop.has(r.id))));
+    },
+
+    async getCompletionCodes(surveyId) {
+      return readJSON<CompletionCodes>(codesKey(surveyId), {});
+    },
+    async setCompletionCodes(surveyId, codes) {
+      if (!all().some((r) => r.id === surveyId)) throw new BackendError('This survey no longer exists.', 'not_found');
+      store.set(codesKey(surveyId), JSON.stringify(codes));
+    },
+    async completionLink(surveyId, responseId) {
+      const r = responses(surveyId).find((x) => x.id === responseId);
+      const rec = all().find((x) => x.id === surveyId);
+      if (!r || r.meta?.preview || !rec || rec.deletedAt) return null;
+      const code = readJSON<CompletionCodes>(codesKey(surveyId), {})[r.meta?.status || 'complete'];
+      return code && COMPLETION_CODE_RE.test(code) ? completionUrl(code) : null;
     },
 
     videoStore() {

@@ -5303,3 +5303,95 @@ body.vp-filled {
     justify-content: flex-start;
   }
 }
+
+/* Share → Prolific */
+.prolific-start {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.prolific-start p {
+  margin: 0;
+}
+
+.prolific-steps {
+  list-style: none;
+  counter-reset: prolific-step;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 20px;
+}
+
+.prolific-steps > li {
+  counter-increment: prolific-step;
+  display: grid;
+  gap: 10px;
+  padding-left: 34px;
+  position: relative;
+}
+
+.prolific-steps > li::before {
+  content: counter(prolific-step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid var(--form);
+  color: var(--form);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.prolific-steps h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.prolific-steps .hint {
+  margin: 0;
+}
+
+.prolific-codes {
+  display: grid;
+  gap: 12px;
+}
+
+.input.prolific-code {
+  max-width: 320px;
+}
+
+.prolific-save {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.prolific-safety {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.prolific-safety .icon {
+  flex: none;
+  margin-top: 2px;
+}
+
+.prolific .notice .btn {
+  margin-top: 8px;
+}
+
+@media (max-width: 560px) {
+  .prolific-steps > li {
+    padding-left: 0;
+    padding-top: 32px;
+  }
+}

@@ -6,6 +6,7 @@ import { createClient, type SupabaseClient, type User } from '@supabase/supabase
 import { shareToken } from '../ids';
 import { normalizeSurvey } from '../templates';
 import type { PublicSurvey, ResponseData, Survey, SurveyRecord, SurveyResponse, SurveyStatus, SurveySummary } from '../types';
+import type { CompletionCodes } from '../prolific';
 import { cancelled, videoLinks } from '../videoUpload';
 import {
   BackendError,
@@ -426,6 +427,24 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
         const { error } = await sb.from('responses').delete().eq('survey_id', surveyId).in('id', ids.slice(i, i + 100));
         if (error) fail(error);
       }
+    },
+
+    // Prolific completion codes: a table of their own that only the owner can read
+    // (schema.sql); respondents get their link from completion_link() after submitting.
+    async getCompletionCodes(surveyId) {
+      const { data, error } = await sb.from('survey_completion').select('codes').eq('survey_id', surveyId).maybeSingle();
+      if (error) fail(error);
+      const codes = (data as { codes?: unknown } | null)?.codes;
+      return codes && typeof codes === 'object' && !Array.isArray(codes) ? (codes as CompletionCodes) : {};
+    },
+    async setCompletionCodes(surveyId, codes) {
+      const { error } = await sb.from('survey_completion').upsert({ survey_id: surveyId, codes, updated_at: new Date().toISOString() });
+      if (error) fail(error);
+    },
+    async completionLink(_surveyId, responseId) {
+      const { data, error } = await sb.rpc('completion_link', { p_response: responseId });
+      if (error) fail(error);
+      return typeof data === 'string' && data.startsWith('https://') ? data : null;
     },
 
     // Uploaded videos: <owner id>/<upload id>/ in the public survey-videos bucket. Only the

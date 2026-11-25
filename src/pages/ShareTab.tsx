@@ -1,10 +1,12 @@
 import qrcode from 'qrcode-generator';
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Field, Icon, Toggle, copyText, downloadFile, useConfirm, useToast } from '../components/ui';
+import { Button, Icon, Toggle, copyText, downloadFile, useConfirm, useToast } from '../components/ui';
 import type { Backend, ShareLink, ShareRole } from '../lib/backend';
 import { fileSlug } from '../lib/export';
 import { publicSurveyUrl, sharedSurveyUrl } from '../lib/router';
 import type { Survey, SurveyRecord } from '../lib/types';
+import type { Updater } from '../lib/useUndoable';
+import { ProlificPanel } from './ProlificPanel';
 
 const ROLES: { role: ShareRole; label: string; hint: string }[] = [
   { role: 'view', label: 'View only', hint: 'Can look through the survey and preview it, but not change it.' },
@@ -18,10 +20,12 @@ export function ShareTab({
   hasChanges,
   onPublish,
   onStatus,
+  update,
 }: {
   backend: Backend;
   record: SurveyRecord;
   survey: Survey;
+  update: Updater<Survey>;
   hasChanges: boolean;
   onPublish: () => void;
   onStatus: (open: boolean) => void;
@@ -38,9 +42,6 @@ export function ShareTab({
 
   const copy = async (text: string, what: string) => toast((await copyText(text)) ? `${what} copied` : 'Couldn’t copy. Select the text and copy it yourself.', 'success');
   const embed = `<iframe src="${link}" title="${survey.title.replace(/"/g, '&quot;')}" style="width:100%;min-height:720px;border:0"></iframe>`;
-  const prolific = survey.urlParams.some((p) => p.name === 'PROLIFIC_PID')
-    ? `${link}&PROLIFIC_PID={{%PROLIFIC_PID%}}&STUDY_ID={{%STUDY_ID%}}&SESSION_ID={{%SESSION_ID%}}`
-    : null;
 
   return (
     <div className="page-narrow share-page">
@@ -104,17 +105,9 @@ export function ShareTab({
             <span>Open</span>
           </a>
         </div>
-        {prolific && (
-          <Field label="Study URL for Prolific" hint="Paste this into Prolific’s study link so participant IDs arrive with each response.">
-            <div className="link-row">
-              <input className="input mono" readOnly value={prolific} onFocus={(e) => e.target.select()} />
-              <Button icon="copy" onClick={() => copy(prolific, 'Prolific link')}>
-                Copy
-              </Button>
-            </div>
-          </Field>
-        )}
       </section>
+
+      <ProlificPanel backend={backend} record={record} survey={survey} update={update} link={link} copy={copy} onPublish={onPublish} />
 
       <section className={`panel share-grid ${!published ? 'is-muted' : ''}`}>
         <div>

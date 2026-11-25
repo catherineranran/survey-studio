@@ -1,3 +1,4 @@
+import type { CompletionCodes } from '../prolific';
 import type {
   PublicSurvey,
   ResponseData,
@@ -138,6 +139,15 @@ export interface Backend {
 
   /** Videos uploaded from the builder (survey owners only). */
   videoStore(): VideoStore;
+
+  /**
+   * The survey's Prolific completion codes (owners only). They're kept apart from the survey,
+   * so respondents can't read them; changes apply straight away, without publishing.
+   */
+  getCompletionCodes(surveyId: string): Promise<CompletionCodes>;
+  setCompletionCodes(surveyId: string, codes: CompletionCodes): Promise<void>;
+  /** After a response is stored: the Prolific completion link for the ending it reached, or null. */
+  completionLink(surveyId: string, responseId: string): Promise<string | null>;
 }
 
 /** How long deleted surveys stay in the bin. */

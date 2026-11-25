@@ -7,6 +7,7 @@ import { placeOf } from './flow';
 import { parseVideoLink } from './video';
 import { RESERVED_NAMES, VARIABLE_RE } from './ids';
 import { TYPE_INFO } from './questionTypes';
+import { visibleCompletionCodes } from './prolific';
 import type { Logic, Question, Survey } from './types';
 
 export interface Issue {
@@ -178,6 +179,11 @@ export function lintSurvey(s: Survey): Issue[] {
   }
 
   if (s.settings.redirectUrl && !/^https?:\/\//i.test(s.settings.redirectUrl.trim())) warn('The redirect link in Settings should start with https://.');
+
+  // A completion code in the survey can be read by anyone who opens it, and used to get paid
+  // without taking part. Kept under Share → Prolific, it's only given out after a response is stored.
+  for (const v of visibleCompletionCodes(s))
+    warn(`${v.where} contains a Prolific completion code that anyone can read in the survey. Move it to Share → Prolific, which only gives it out after a response is saved.`);
 
   // Export columns generated from names and codes (Q3_1, Q3_other, time_Block) must not collide.
   const cols = buildColumns(s, { values: 'codes', includePreview: true, includeTimings: true }, false);
