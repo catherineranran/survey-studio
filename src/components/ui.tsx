@@ -10,6 +10,7 @@ import {
   useState,
   type ButtonHTMLAttributes,
   type ReactNode,
+  type Ref,
   type TextareaHTMLAttributes,
 } from 'react';
 
@@ -216,16 +217,38 @@ export function Field({ label, hint, error, children, htmlFor }: { label: ReactN
   );
 }
 
-/** Textarea that grows with its content. */
-export function AutoTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => {
+/** Textarea that grows with its content, and fits again when it gets wider or narrower (the text rewraps). */
+export function AutoTextarea({ ref: outerRef, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement> & { ref?: Ref<HTMLTextAreaElement> }) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  const fit = useCallback(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight + 2}px`;
-  }, [props.value]);
-  return <textarea ref={ref} rows={1} {...props} />;
+  }, []);
+  useLayoutEffect(fit, [props.value, fit]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // Only a new width changes the wrapping; the height changes fit() makes are ignored.
+    let width = el.offsetWidth;
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => el.offsetWidth !== width && ((width = el.offsetWidth), fit()));
+    observer?.observe(el);
+    // The text's width changes once the web font has loaded.
+    document.fonts?.ready.then(fit, () => {});
+    return () => observer?.disconnect();
+  }, [fit]);
+  return (
+    <textarea
+      ref={(el) => {
+        ref.current = el;
+        if (typeof outerRef === 'function') outerRef(el);
+        else if (outerRef) outerRef.current = el;
+      }}
+      rows={1}
+      {...props}
+    />
+  );
 }
 
 /** Number input that keeps whatever the user is typing and reports numbers (or null). */

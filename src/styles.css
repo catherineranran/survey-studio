@@ -2475,7 +2475,8 @@ input:focus-visible + .mark {
 
 .clist-row {
   display: flex;
-  align-items: center;
+  /* A long option wraps over several lines; the rest of the row stays level with its first line. */
+  align-items: flex-start;
   gap: 8px;
   padding: 2px 0;
   border-radius: var(--r-s);
@@ -2493,16 +2494,38 @@ input:focus-visible + .mark {
   margin-left: -6px;
 }
 
+/* Level with the first line of the text (34px), however many lines it has. */
+.clist-row > .grip {
+  margin-top: 3px;
+}
+
+.clist-row > .mark {
+  margin-top: 9px;
+}
+
+.clist-row > .tag {
+  margin-top: 7.5px;
+}
+
+.clist-row > .input.clist-code {
+  margin-top: 2px;
+}
+
 .clist-label {
+  display: block;
   flex: 1;
   min-width: 0;
   min-height: 34px;
   padding: 5px 8px;
   font-size: 14.5px;
+  /* One line is exactly as tall as the row (34px), as before; longer texts add lines of the same height. */
+  line-height: 22px;
   border: 1px solid transparent;
   border-bottom-color: var(--line-2);
   border-radius: var(--r-s);
   background: transparent;
+  resize: none;
+  overflow: hidden;
 }
 
 .clist-label:hover {

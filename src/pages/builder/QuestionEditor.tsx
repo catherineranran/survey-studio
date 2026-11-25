@@ -326,7 +326,7 @@ export function ChoiceList({
   fixed?: boolean;
   prefix?: string;
 }) {
-  const refs = useRef(new Map<string, HTMLInputElement>());
+  const refs = useRef(new Map<string, HTMLTextAreaElement>());
   const [focusId, setFocusId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -365,9 +365,11 @@ export function ChoiceList({
 
   const patch = (id: string, p: Partial<Choice>) => onChange(items.map((c) => (c.id === id ? { ...c, ...p } : c)));
 
-  const onKey = (e: KeyboardEvent<HTMLInputElement>, i: number, c: Choice) => {
+  const onKey = (e: KeyboardEvent<HTMLTextAreaElement>, i: number, c: Choice) => {
+    // Enter adds the next option; Shift+Enter starts a new line within this one.
+    if (e.key === 'Enter' && !e.shiftKey && fixed) return e.preventDefault();
     if (fixed) return;
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       insertAfter(i, ['']);
     } else if (e.key === 'Backspace' && c.label === '' && items.length > 1) {
@@ -386,7 +388,7 @@ export function ChoiceList({
     }
   };
 
-  const onPaste = (e: ClipboardEvent<HTMLInputElement>, i: number, c: Choice) => {
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>, i: number, c: Choice) => {
     if (fixed) return;
     const text = e.clipboardData.getData('text');
     if (!/\r?\n/.test(text.trim())) return;
@@ -454,7 +456,8 @@ export function ChoiceList({
               </span>
             )}
             {mark !== 'none' && <span className={`mark mark-${mark} mark-sm`} aria-hidden="true" />}
-            <input
+            {/* Grows to show the whole text, however long. */}
+            <AutoTextarea
               ref={(el) => {
                 if (el) refs.current.set(c.id, el);
                 else refs.current.delete(c.id);
@@ -506,7 +509,7 @@ export function ChoiceList({
           <button type="button" className="link-btn" onClick={() => onChange(items.map((c, i) => ({ ...c, code: i + 1 })))} title="Set export codes to 1, 2, 3 … in the current order">
             Renumber codes
           </button>
-          <span className="hint clist-tip">Tip: paste a list to add many at once.</span>
+          <span className="hint clist-tip">Tip: paste a list to add many at once. Shift+Enter starts a new line.</span>
         </div>
       )}
     </div>
